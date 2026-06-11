@@ -1,0 +1,206 @@
+Tiny World Language
+
+Tiny World Language is a knowledge modeling language where every stored fact is a relation triplet, every relation is multi-valued, and derived relations are computed lazily.
+
+Non-normative background: the design is influenced by RDF, Datalog, spreadsheets, object traversal, selector syntax, and Handlebars.
+
+The three built-in ontology relations are instanceof, extends, and sameas.
+
+Statements
+
+A file is a list of semicolon-terminated statements.
+
+Stored relation:
+  SUBJECT RELATION VALUE;
+
+Derived relation:
+  TYPE RELATION -> FORMULA;
+
+Examples:
+  Mac instanceof Person;
+  Person extends Entity;
+  USA sameAs UnitedStates;
+  Person age -> YEAR(TODAY()) - $.bornYear;
+
+Identifiers
+
+Identifiers are Unicode names.
+They may include letters, numbers, "_", "-", ".", and ":".
+They may not contain whitespace, quotes, brackets, braces, semicolons, or operators.
+Reserved words are TRUE, FALSE, NULL, instanceof, extends, same, IN, AND, OR, NOT.
+
+Values
+
+VALUE is one of:
+  number
+  string
+  TRUE
+  FALSE
+  NULL
+  entity identifier
+  formula expression
+
+Bare identifiers in VALUE position are entity references.
+Quoted values are strings.
+Strings may be multiline.
+Strings may contain Handlebars templates.
+
+Core ontology relations
+
+instanceof means entity/class membership.
+extends means class/class inheritance.
+sameas means identity equivalence.
+
+Inference:
+  If X instanceof A and A extends B, then X instanceof B.
+  If A sameas B, A and B resolve as the same entity.
+
+Relations and traversal
+
+Every relation is multi-valued.
+Repeated relation facts append values.
+Missing relations return [].
+Dot access traverses outgoing relations, maps over arrays, and flattens.
+(There are no actual object properties in the data model. Dot access is relation traversal syntax.)
+
+Example:
+  Mac brother Andy;
+  Mac brother Dave;
+  Mac.brother = [Andy, Dave]
+  Mac.brother.age = [Andy.age, Dave.age]
+
+Evaluation is array-based.
+Aggregation is explicit.
+Required array functions: COUNT, FIRST, LAST, UNIQUE, FILTER, SORT.
+
+Derived relations
+
+Derived relations are lazy and evaluated when read.
+A derived relation has the form:
+  TYPE RELATION -> FORMULA;
+
+It means:
+  For any $ where $ instanceof TYPE, derive:
+  $ RELATION FORMULA_RESULT;
+
+Stored relation facts override derived relations for the same subject and relation.
+Typed derived relations apply to entities matching TYPE through instanceof.
+More specific types override less specific types.
+Use Entity as the global fallback type.
+
+Formula expressions
+
+Formula syntax is the declared HyperFormula-compatible expression subset plus entity path references.
+Unknown functions are errors.
+Function names are case-insensitive.
+Function arity follows the declared function table.
+
+Required operators:
+  + - * / ^ % &
+  = == != <> < <= > >=
+  && || !
+  ?? IN
+
+Required literals:
+  numbers, strings, TRUE, FALSE, NULL
+
+Required logic functions:
+  IF, IFS, AND, OR, NOT, XOR
+
+Required math functions:
+  ABS, ACOS, ACOSH, ASIN, ASINH, ATAN, ATAN2, ATANH,
+  CEILING, COS, COSH, DEGREES, EVEN, EXP, FACT, FLOOR,
+  INT, LN, LOG, LOG10, MOD, ODD, PI, POWER, PRODUCT,
+  QUOTIENT, RADIANS, RAND, RANDBETWEEN, ROUND, ROUNDDOWN,
+  ROUNDUP, SIGN, SIN, SINH, SQRT, SUM, SUMIF, SUMIFS,
+  TAN, TANH, TRUNC
+
+Required text functions:
+  CHAR, CLEAN, CODE, CONCAT, EXACT, FIND, LEFT, LEN,
+  LOWER, MID, PROPER, REPLACE, REPT, RIGHT, SEARCH,
+  SUBSTITUTE, T, TEXT, TEXTJOIN, TRIM, UPPER, VALUE
+
+Required date functions:
+  DATE, DATEVALUE, DAY, DAYS, EDATE, EOMONTH, HOUR,
+  MINUTE, MONTH, NETWORKDAYS, NOW, SECOND, TIME,
+  TIMEVALUE, TODAY, WEEKDAY, WEEKNUM, WORKDAY, YEAR
+
+Required variable function:
+  LET
+
+Entity Selector Syntax
+
+A selector returns entities matching relation constraints.
+
+Selector:
+  TYPE FILTER*
+
+Filter:
+  [PATH OP VALUE]
+
+AND:
+  Person[family=McFlyFam][age>=18]
+
+OR:
+  Person[family=McFlyFam], Person[family=Brown]
+
+Operators:
+  = == != <> < <= > >= IN
+
+Examples:
+  Person[family=McFlyFam]
+  Person[family.name="McFly"]
+  Person[age>=18]
+  Person[family=McFlyFam][firstName!="Lorraine"]
+
+Templates
+
+Templates use Handlebars.
+Template expressions may reference entity paths and formulas.
+Template loops may iterate selectors.
+
+Examples:
+  {{Marty.lastName}}
+  {{YEAR(TODAY()) - Marty.bornYear}}
+  {{#each Person[family=McFlyFam]}} {{$.firstName}} {{/each}}
+
+Comments
+
+Line comment:
+  // comment
+
+Block comment:
+  /* comment */
+
+Example program
+
+  Entity name "Entity";
+
+  Person extends Entity;
+  Family extends Entity;
+
+  Person age -> YEAR(TODAY()) - $.bornYear;
+  Person lastName -> $.family.name;
+
+  McFlyFam instanceof Family;
+  McFlyFam name "McFly";
+
+  Marty instanceof Person;
+  Marty firstName "Marty";
+  Marty bornYear 1968;
+  Marty family McFlyFam;
+
+  Lorraine instanceof Person;
+  Lorraine firstName "Lorraine";
+  Lorraine family McFlyFam;
+
+  Doc instanceof Person;
+  Doc firstName "Doc";
+  Doc lastName "Brown";
+
+  Biff persona "
+  A bully with disdain for:
+  {{#each Person[family=McFlyFam][firstName!=\"Lorraine\"]}}
+  - {{firstName}} {{lastName}}
+  {{/each}}
+  ";
