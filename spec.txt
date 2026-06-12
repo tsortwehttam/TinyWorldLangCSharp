@@ -2,9 +2,9 @@ Tiny World Language (TWL)
 
 TWL authors dynamic worlds. Everything is an entity; entities are connected by
 labeled, multi-valued relations. TWL itself defines only the triplet grammar and
-the entity/relation model. Every value sublanguage is a referenced standard, so
-the language is small and its behavior is pinned to specs with conformance suites
-rather than to prose that can be reinterpreted. See Footnotes for the standards.
+the entity/relation model. Values are computed with CEL and presented with
+Mustache -- both used as their published specs define them, so behavior is pinned
+to conformance suites rather than to prose. See Footnotes for the standards.
 
 Statements
 
@@ -18,7 +18,7 @@ VALUE is one of:
   entity reference   a bare identifier              (Mac, McFlyFam)
   number             123, 1.5
   boolean / null     true, false, null
-  string             "..."   (may embed templates — Footnote T)
+  string             "..."   (a Mustache template — Footnote T)
   selector           Type[ ... ]                    (Footnote S)
 
 Identifiers are Unicode names of letters, digits, and _ - . : with no whitespace,
@@ -52,20 +52,28 @@ stored fact for the same subject and relation overrides the derived one. A more
 specific TYPE (by extends) overrides a less specific one. Use Entity as the global
 fallback type.
 
-Expressions are CEL
+Computation is CEL
 
-Every expression -- after ->, inside selector filters, and inside {{ }} in
-templates -- is Common Expression Language. CEL is non-Turing-complete,
-side-effect-free, and guaranteed to terminate, which is why TWL has no loops,
-recursion, or user-defined functions of its own. The operators, types, functions,
-and the comprehension macros filter/map/exists/all are CEL's; unknown names are
-errors. (Footnote C)
+Every expression -- after ->, and inside selector filters -- is Common Expression
+Language. CEL is non-Turing-complete, side-effect-free, and guaranteed to
+terminate, which is why TWL has no loops, recursion, or user-defined functions of
+its own. The operators, types, functions, and the comprehension macros
+filter/map/exists/all are CEL's; unknown names are errors. (Footnote C)
 
 TWL supplies three host bindings to CEL -- this is CEL's normal extension
 mechanism, not a change to the language:
   self                the current entity
   now                 a timestamp, frozen per evaluation (use now.getFullYear() etc.)
   instances(Type)     the list of entities that are instanceof Type
+
+Presentation is Mustache
+
+A string value is a Mustache template, rendered against an entity as its context.
+Templates only present; they never compute. Anything dynamic is first defined as a
+CEL derived relation and then referenced here by relation name.
+
+  {{ r }}            interpolate relation r of the current entity   (Footnote M)
+  {{# r }}..{{/}}    iterate relation r, binding each value as the current entity
 
 Footnotes
 
@@ -74,7 +82,7 @@ C  CEL: https://github.com/google/cel-spec -- pin a version; its conformance tes
 
 D  Member access continued over a list maps and flattens, and a missing relation
    yields []: self.r.s == self.r.flatMap(x, x.s). This is the one TWL extension to
-   CEL member access. (Pure-CEL alternative, no extension: write self.r.map(x, x.s).)
+   CEL member access. A relation is always a list; index (self.r[0]) for a scalar.
 
 O  instanceof / extends / sameas alias rdf:type / rdfs:subClassOf / owl:sameAs;
    inference is the matching RDFS/OWL entailment over just those three relations.
@@ -85,10 +93,13 @@ S  Selector sugar. Type[P1][P2] desugars to the CEL set
    and r OP v (OP one of < <= > >= !=) means self.r.exists(x, x OP v). A comma
    between selectors is set union.
 
-T  Templates. A string may contain Mustache (https://github.com/mustache/spec; its
-   YAML conformance suite is normative). {{ EXPR }} interpolates a CEL expression.
-   {{# SELECTOR }} ... {{/}} iterates the selector, binding each entity as self in
-   the body. (The bracketed section key is the one TWL extension to Mustache.)
+T  Templates use Mustache: https://github.com/mustache/spec -- its YAML conformance
+   suite is normative. TWL adds nothing to Mustache; it only supplies the entity as
+   the rendering context.
+
+M  A relation is a list. {{ r }} renders its values in order, concatenated (so a
+   single-valued relation renders as its value, an empty one as ""). Iterate
+   multi-valued relations with a {{# r }} section.
 
 Budget (the only safety mechanism TWL must enforce)
 
@@ -104,8 +115,9 @@ Example
   Person extends Entity;
   Family extends Entity;
 
-  Person age      -> now.getFullYear() - self.bornYear;
+  Person age      -> now.getFullYear() - self.bornYear[0];
   Person lastName -> self.family.name;
+  Person enemies  -> Person[family=McFlyFam][firstName!="Lorraine"];
 
   McFlyFam instanceof Family;
   McFlyFam name "McFly";
@@ -119,7 +131,7 @@ Example
   Lorraine firstName "Lorraine";
   Lorraine family McFlyFam;
 
+  Biff instanceof Person;
   Biff persona "A bully with disdain for:
-  {{# Person[family=McFlyFam][firstName!=\"Lorraine\"] }}
-  - {{ self.firstName }} {{ self.lastName }}
+  {{# enemies }}- {{ firstName }} {{ lastName }}
   {{/}}";
