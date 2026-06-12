@@ -13,8 +13,10 @@ conformance suites must pass unmodified. TWL adds no syntax inside either langua
 and reinterprets nothing they define -- it only supplies the evaluation context
 (host variables, functions, and the entity type). Consequently TWL needs no
 parser normalization, desugaring pass, or error interception: the delimiters
-(-> for CEL, "..." for Mustache) do all the separation. TWL maps losslessly to
-the RDF/OWL model but is its own serialization, not Turtle.
+(-> for CEL, "..." for Mustache) do all the separation. TWL is its own
+serialization, not Turtle, but round-trips losslessly to the RDF/OWL model on
+everything that model defines; relation order is a TWL presentation detail that
+RDF does not carry, so it is out of scope for the round-trip rather than lost.
 
 Statements
 
@@ -37,9 +39,12 @@ instanceof, extends, sameas (and the literals true, false, null).
 Entities and relations
 
 Every relation is a total, list-valued field of an entity: self.r is the list of
-values of r on self, and is [] when none are asserted -- never an error. Repeated
-facts append in order. There are no object properties; a relation is simply a
-field whose value is a list.
+values of r on self, and is [] when none are asserted -- never an error. A
+relation's values are a set: repeated facts are idempotent, so asserting facts in
+any order, any number of times, converges to the same graph. Evaluation presents
+the values in a deterministic order (insertion order); that order is a TWL
+presentation detail and is not part of the RDF round-trip. There are no object
+properties; a relation is simply a field whose value is a list.
 
 Ontology (the only built-in relations)
 
