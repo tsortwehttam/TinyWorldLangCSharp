@@ -14,9 +14,11 @@ and reinterprets nothing they define -- it only supplies the evaluation context
 (host variables, functions, and the entity type). Consequently TWL needs no
 parser normalization, desugaring pass, or error interception: the delimiters
 (-> for CEL, "..." for Mustache) do all the separation. TWL is its own
-serialization, not Turtle, but round-trips losslessly to the RDF/OWL model on
-everything that model defines; relation order is a TWL presentation detail that
-RDF does not carry, so it is out of scope for the round-trip rather than lost.
+serialization, not Turtle. It is a faithful subset of the RDF/OWL model: every
+TWL fact graph is an RDF graph (lossless out), while TWL omits by design what it
+does not need (rich datatypes, arbitrary IRIs, blank nodes, and entailment beyond
+the three ontology relations), so arbitrary RDF need not import (lossy in). Nothing
+TWL stores contradicts RDF; it only says less.
 
 Statements
 
@@ -40,11 +42,14 @@ Entities and relations
 
 Every relation is a total, list-valued field of an entity: self.r is the list of
 values of r on self, and is [] when none are asserted -- never an error. A
-relation's values are a set: repeated facts are idempotent, so asserting facts in
-any order, any number of times, converges to the same graph. Evaluation presents
-the values in a deterministic order (insertion order); that order is a TWL
-presentation detail and is not part of the RDF round-trip. There are no object
-properties; a relation is simply a field whose value is a list.
+relation's values are an unordered set: repeated facts are idempotent, so
+asserting facts in any order, any number of times, converges to the same graph.
+Where evaluation needs a sequence (indexing, rendering), it uses a canonical order
+derived from the data -- entity values by id, literals by value -- so the order is
+deterministic and survives merge and the RDF round-trip. The set carries no
+authoring order. When order is part of the world, model it as a fact and sort on
+it explicitly (sortBy, below). There are no object properties; a relation is
+simply a field whose value is a list.
 
 Ontology (the only built-in relations)
 
@@ -79,11 +84,15 @@ only the evaluation context -- CEL's standard host mechanism, which adds no synt
   self                the current entity
   now                 a timestamp, frozen per evaluation (now.getFullYear() etc.)
   instances(Type)     the list of entities that are instanceof Type
+  sortBy(list, key)   list ordered by the relation named key (a string); a plain
+                      function, not a macro, so it adds no CEL syntax (CEL has no
+                      native sort, and a key lambda would)
   e.r                 field access: the list of values of relation r on entity e
 
 Because TWL adds no syntax, every operation is plain CEL:
   traverse:  self.family.map(f, f.name)
   select:    instances(Person).filter(p, McFlyFam in p.family)
+  order:     self.children.sortBy("bornYear")
   scalar:    self.bornYear[0]
 
 TWL deliberately has no dot-flatten or bracket-selector sugar. Field selection on
