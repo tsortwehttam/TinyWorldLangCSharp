@@ -1,186 +1,111 @@
-Tiny World Language
+Tiny World Language (TWL)
 
-Tiny World Language is a knowledge modeling language where every stored fact is a relation triplet, every relation is multi-valued, and derived relations are computed lazily.
-
-Non-normative background: the design is influenced by RDF, Datalog, spreadsheets, object traversal, selector syntax, and Handlebars.
-
-The three built-in ontology relations are instanceof, extends, and sameas.
+TWL authors dynamic worlds. Everything is an entity; entities are connected by
+labeled, multi-valued relations. TWL itself defines only the triplet grammar and
+the entity/relation model. Every value sublanguage is a referenced standard, so
+the language is small and its behavior is pinned to specs with conformance suites
+rather than to prose that can be reinterpreted. See Footnotes for the standards.
 
 Statements
 
-A file is a list of semicolon-terminated statements.
+A file is a list of ";"-terminated statements.
+Comments: // line, and /* block */.
 
-Stored relation:
-  SUBJECT RELATION VALUE;
-
-Derived relation:
-  TYPE RELATION -> FORMULA;
-
-Examples:
-  Mac instanceof Person;
-  Person extends Entity;
-  USA sameAs UnitedStates;
-  Person age -> YEAR(TODAY()) - $.bornYear;
-
-Identifiers
-
-Identifiers are Unicode names.
-They may include letters, numbers, "_", "-", ".", and ":".
-They may not contain whitespace, quotes, brackets, braces, semicolons, or operators.
-Reserved words are TRUE, FALSE, NULL, instanceof, extends, same, IN, AND, OR, NOT.
-
-Values
+  Stored fact:    SUBJECT RELATION VALUE;
+  Derived fact:   TYPE RELATION -> CEL;
 
 VALUE is one of:
-  number
-  string
-  TRUE
-  FALSE
-  NULL
-  entity identifier
-  formula expression
+  entity reference   a bare identifier              (Mac, McFlyFam)
+  number             123, 1.5
+  boolean / null     true, false, null
+  string             "..."   (may embed templates — Footnote T)
+  selector           Type[ ... ]                    (Footnote S)
 
-Bare identifiers in VALUE position are entity references.
-Quoted values are strings.
-Strings may be multiline.
-Strings may contain Handlebars templates.
+Identifiers are Unicode names of letters, digits, and _ - . : with no whitespace,
+quotes, brackets, braces, semicolons, or operators. The only reserved words are
+instanceof, extends, sameas (and the literals true, false, null).
 
-Core ontology relations
+Entities and relations
 
-instanceof means entity/class membership.
-extends means class/class inheritance.
-sameas means identity equivalence.
+Every relation is multi-valued. Repeated facts append. A missing relation is [].
+Relation access self.r returns the list of values of r on self. Access continued
+over a list maps and flattens: list.r == list.flatMap(x, x.r). (Footnote D)
+There are no object properties; dot access is relation traversal.
 
-Inference:
-  If X instanceof A and A extends B, then X instanceof B.
-  If A sameas B, A and B resolve as the same entity.
+Ontology (the only built-in relations)
 
-Relations and traversal
+  instanceof  aliases  rdf:type
+  extends     aliases  rdfs:subClassOf
+  sameas      aliases  owl:sameAs
 
-Every relation is multi-valued.
-Repeated relation facts append values.
-Missing relations return [].
-Dot access traverses outgoing relations, maps over arrays, and flattens.
-(There are no actual object properties in the data model. Dot access is relation traversal syntax.)
+Inference is the corresponding RDFS/OWL entailment, restricted to these three
+relations: if X instanceof A and A extends B then X instanceof B; if A sameas B
+then A and B are the same entity. (Footnote O)
 
-Example:
-  Mac brother Andy;
-  Mac brother Dave;
-  Mac.brother = [Andy, Dave]
-  Mac.brother.age = [Andy.age, Dave.age]
+Derived facts
 
-Evaluation is array-based.
-Aggregation is explicit.
-Required array functions: COUNT, FIRST, LAST, UNIQUE, FILTER, SORT.
+  TYPE RELATION -> CEL;
 
-Derived relations
+For every entity bound as self where self instanceof TYPE, the value of RELATION is
+the result of the CEL expression. Derived facts are lazy, evaluated on read. A
+stored fact for the same subject and relation overrides the derived one. A more
+specific TYPE (by extends) overrides a less specific one. Use Entity as the global
+fallback type.
 
-Derived relations are lazy and evaluated when read.
-A derived relation has the form:
-  TYPE RELATION -> FORMULA;
+Expressions are CEL
 
-It means:
-  For any $ where $ instanceof TYPE, derive:
-  $ RELATION FORMULA_RESULT;
+Every expression -- after ->, inside selector filters, and inside {{ }} in
+templates -- is Common Expression Language. CEL is non-Turing-complete,
+side-effect-free, and guaranteed to terminate, which is why TWL has no loops,
+recursion, or user-defined functions of its own. The operators, types, functions,
+and the comprehension macros filter/map/exists/all are CEL's; unknown names are
+errors. (Footnote C)
 
-Stored relation facts override derived relations for the same subject and relation.
-Typed derived relations apply to entities matching TYPE through instanceof.
-More specific types override less specific types.
-Use Entity as the global fallback type.
+TWL supplies three host bindings to CEL -- this is CEL's normal extension
+mechanism, not a change to the language:
+  self                the current entity
+  now                 a timestamp, frozen per evaluation (use now.getFullYear() etc.)
+  instances(Type)     the list of entities that are instanceof Type
 
-Formula expressions
+Footnotes
 
-Formula syntax is the declared HyperFormula-compatible expression subset plus entity path references.
-Unknown functions are errors.
-Function names are case-insensitive.
-Function arity follows the declared function table.
+C  CEL: https://github.com/google/cel-spec -- pin a version; its conformance test
+   suite is the normative semantics. TWL uses CEL unchanged except for Footnote D.
 
-Required operators:
-  + - * / ^ % &
-  = == != <> < <= > >=
-  && || !
-  ?? IN
+D  Member access continued over a list maps and flattens, and a missing relation
+   yields []: self.r.s == self.r.flatMap(x, x.s). This is the one TWL extension to
+   CEL member access. (Pure-CEL alternative, no extension: write self.r.map(x, x.s).)
 
-Required literals:
-  numbers, strings, TRUE, FALSE, NULL
+O  instanceof / extends / sameas alias rdf:type / rdfs:subClassOf / owl:sameAs;
+   inference is the matching RDFS/OWL entailment over just those three relations.
 
-Required logic functions:
-  IF, IFS, AND, OR, NOT, XOR
+S  Selector sugar. Type[P1][P2] desugars to the CEL set
+     instances(Type).filter(self, P1 && P2)
+   Inside a filter Pi a bare relation name r means self.r; r = v means v in self.r;
+   and r OP v (OP one of < <= > >= !=) means self.r.exists(x, x OP v). A comma
+   between selectors is set union.
 
-Required math functions:
-  ABS, ACOS, ACOSH, ASIN, ASINH, ATAN, ATAN2, ATANH,
-  CEILING, COS, COSH, DEGREES, EVEN, EXP, FACT, FLOOR,
-  INT, LN, LOG, LOG10, MOD, ODD, PI, POWER, PRODUCT,
-  QUOTIENT, RADIANS, RAND, RANDBETWEEN, ROUND, ROUNDDOWN,
-  ROUNDUP, SIGN, SIN, SINH, SQRT, SUM, SUMIF, SUMIFS,
-  TAN, TANH, TRUNC
+T  Templates. A string may contain Mustache (https://github.com/mustache/spec; its
+   YAML conformance suite is normative). {{ EXPR }} interpolates a CEL expression.
+   {{# SELECTOR }} ... {{/}} iterates the selector, binding each entity as self in
+   the body. (The bracketed section key is the one TWL extension to Mustache.)
 
-Required text functions:
-  CHAR, CLEAN, CODE, CONCAT, EXACT, FIND, LEFT, LEN,
-  LOWER, MID, PROPER, REPLACE, REPT, RIGHT, SEARCH,
-  SUBSTITUTE, T, TEXT, TEXTJOIN, TRIM, UPPER, VALUE
+Budget (the only safety mechanism TWL must enforce)
 
-Required date functions:
-  DATE, DATEVALUE, DAY, DAYS, EDATE, EOMONTH, HOUR,
-  MINUTE, MONTH, NETWORKDAYS, NOW, SECOND, TIME,
-  TIMEVALUE, TODAY, WEEKDAY, WEEKNUM, WORKDAY, YEAR
+CEL and Mustache already terminate, so abuse can only come from the TWL layer:
+relation traversal, derived-relation chains, and template expansion. Evaluation
+runs under a fixed budget -- max traversal depth, max derived-relation recursion
+depth with cycle detection, max result-list length, max total output size.
+Exceeding the budget is an error.
 
-Required variable function:
-  LET
-
-Entity Selector Syntax
-
-A selector returns entities matching relation constraints.
-
-Selector:
-  TYPE FILTER*
-
-Filter:
-  [PATH OP VALUE]
-
-AND:
-  Person[family=McFlyFam][age>=18]
-
-OR:
-  Person[family=McFlyFam], Person[family=Brown]
-
-Operators:
-  = == != <> < <= > >= IN
-
-Examples:
-  Person[family=McFlyFam]
-  Person[family.name="McFly"]
-  Person[age>=18]
-  Person[family=McFlyFam][firstName!="Lorraine"]
-
-Templates
-
-Templates use Handlebars.
-Template expressions may reference entity paths and formulas.
-Template loops may iterate selectors.
-
-Examples:
-  {{Marty.lastName}}
-  {{YEAR(TODAY()) - Marty.bornYear}}
-  {{#each Person[family=McFlyFam]}} {{$.firstName}} {{/each}}
-
-Comments
-
-Line comment:
-  // comment
-
-Block comment:
-  /* comment */
-
-Example program
+Example
 
   Entity name "Entity";
-
   Person extends Entity;
   Family extends Entity;
 
-  Person age -> YEAR(TODAY()) - $.bornYear;
-  Person lastName -> $.family.name;
+  Person age      -> now.getFullYear() - self.bornYear;
+  Person lastName -> self.family.name;
 
   McFlyFam instanceof Family;
   McFlyFam name "McFly";
@@ -194,13 +119,7 @@ Example program
   Lorraine firstName "Lorraine";
   Lorraine family McFlyFam;
 
-  Doc instanceof Person;
-  Doc firstName "Doc";
-  Doc lastName "Brown";
-
-  Biff persona "
-  A bully with disdain for:
-  {{#each Person[family=McFlyFam][firstName!=\"Lorraine\"]}}
-  - {{firstName}} {{lastName}}
-  {{/each}}
-  ";
+  Biff persona "A bully with disdain for:
+  {{# Person[family=McFlyFam][firstName!=\"Lorraine\"] }}
+  - {{ self.firstName }} {{ self.lastName }}
+  {{/}}";
