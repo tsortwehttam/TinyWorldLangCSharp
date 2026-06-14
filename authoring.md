@@ -14,13 +14,13 @@ A world is a list of statements, each ending in `;`. There are two kinds:
 /* block comment */
 
 SUBJECT  RELATION  VALUE ;     // a stored fact
-TYPE     RELATION  -> EXPR ;   // a computed fact
+TYPE     RELATION  = EXPR ;   // a computed fact
 ```
 
 - A **stored fact** records something directly:
   `Marty bornYear 1968 ;`
 - A **computed fact** gives a rule for a relation, applied to every entity of a
-  type: `Person age -> now.getFullYear() - one(self.bornYear) ;`
+  type: `Person age = now.getFullYear() - one(self.bornYear) ;`
 
 ## Values
 
@@ -72,7 +72,7 @@ Marty    instanceof Person ;
 
 ## Computed facts
 
-After `->` you write an expression in **CEL** (Common Expression Language). The
+After `=` you write an expression in **CEL** (Common Expression Language). The
 rule runs for every entity that is an instance of the named type. Inside the
 expression you have:
 
@@ -91,10 +91,10 @@ Numbers are not converted automatically: do not mix integers and decimals in one
 operation.
 
 ```
-Person age      -> now.getFullYear() - one(self.bornYear) ;
-Person lastName -> self.family.map(f, one(f.name)) ;
-Person enemies  -> instances(Person).filter(p, McFlyFam in p.family && self != p) ;
-Person eldest   -> sortBy(self.children, "bornYear") ;
+Person age      = now.getFullYear() - one(self.bornYear) ;
+Person lastName = self.family.map(f, one(f.name)) ;
+Person enemies  = instances(Person).filter(p, McFlyFam in p.family && self != p) ;
+Person eldest   = sortBy(self.children, "bornYear") ;
 ```
 
 ## Which value wins
@@ -138,9 +138,9 @@ Entity name "Entity" ;
 Person extends Entity ;
 Family extends Entity ;
 
-Person age      -> now.getFullYear() - one(self.bornYear) ;
-Person lastName -> self.family.map(f, one(f.name)) ;
-Person enemies  -> instances(Person).filter(p, McFlyFam in p.family && self != p) ;
+Person age      = now.getFullYear() - one(self.bornYear) ;
+Person lastName = self.family.map(f, one(f.name)) ;
+Person enemies  = instances(Person).filter(p, McFlyFam in p.family && self != p) ;
 
 McFlyFam instanceof Family ;  McFlyFam name "McFly" ;
 

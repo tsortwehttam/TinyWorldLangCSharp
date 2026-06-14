@@ -18,7 +18,7 @@ every behavior an implementation must reproduce.
 ```
 // line, /* block */ comments
 SUBJECT RELATION VALUE ;     // stored fact
-TYPE    RELATION -> CEL ;    // derived fact
+TYPE    RELATION = CEL ;    // derived fact
 ```
 
 `VALUE` is one of:
@@ -63,7 +63,7 @@ arbitrary IRIs, blank nodes.
 
 ## Computation (CEL)
 
-Text after `->` is CEL, verbatim, evaluated lazily. For each
+Text after `=` is CEL, verbatim, evaluated lazily. For each
 `self instanceof TYPE`, `RELATION` = the CEL result.
 
 - `self` — the current entity
@@ -152,9 +152,9 @@ Entity name "Entity";
 Person extends Entity;
 Family extends Entity;
 
-Person age      -> now.getFullYear() - one(self.bornYear);
-Person lastName -> self.family.map(f, one(f.name));
-Person enemies  -> instances(Person).filter(p, McFlyFam in p.family && self != p);
+Person age      = now.getFullYear() - one(self.bornYear);
+Person lastName = self.family.map(f, one(f.name));
+Person enemies  = instances(Person).filter(p, McFlyFam in p.family && self != p);
 
 McFlyFam instanceof Family;  McFlyFam name "McFly";
 
