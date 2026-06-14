@@ -41,7 +41,8 @@ lossless).
   none.
 - Reading never errors; `self.r[0]` on an empty set errors (plain CEL). Use
   `one(self.r)` for the single value of a relation — it yields `null` rather than
-  erroring when the set is empty.
+  erroring when the set is empty, or `one(self.r, fallback)` to yield a default
+  instead of `null`.
 - A set is unordered, idempotent, order-independent → one graph.
 - Open-world: any id denotes an entity, no declaration; unknown → all relations
   `[]`.
@@ -72,6 +73,8 @@ Text after `=` is CEL, verbatim, evaluated lazily. For each
 - `sortBy(list, k)` — list ordered by the relation named by string `k`
 - `one(s)` — the single value of set `s` in canonical order, or `null` if `s` is
   empty
+- `one(s, fallback)` — as `one(s)`, but yields `fallback` instead of `null` when
+  `s` is empty
 - `e.r` — the set of values of relation `r` on entity `e`
 
 No implicit numeric coercion. Every operation is plain CEL, for example:
@@ -127,7 +130,8 @@ stays small enough to audit at a glance.
   `true`, numbers numerically, strings by code point, entities by canonical id.
   Under `sameas`, an entity's canonical id is the lexicographically least in its
   merged class. `one(s)` yields the canonical-first value of `s`, or `null` when
-  `s` is empty. A `sortBy` key takes each element's canonical-first value, and an
+  `s` is empty; `one(s, d)` yields `d` instead of `null` for an empty `s`. A
+  `sortBy` key takes each element's canonical-first value, and an
   empty or mixed-type key is an error. Rendered to text: bool becomes
   `true`/`false`, int its decimal, double its shortest round-tripping decimal,
   null the empty string.

@@ -50,6 +50,8 @@ These words are reserved and cannot be used as entity names:
   nothing.
 - To read a single value, use `one(r)`: it gives the value of a single-valued
   relation, or `null` when the set is empty — for example `one(self.bornYear)`.
+  To supply a default instead of `null`, pass it as a second argument:
+  `one(self.bornYear, 1900)`.
 
 ## Types and identity
 
@@ -81,6 +83,7 @@ expression you have:
 - `instances(T)` — the set of all entities that are instances of `T`
 - `sortBy(list, "rel")` — `list` ordered by the relation named `rel`
 - `one(s)` — the single value of set `s`, or `null` when empty
+- `one(s, fallback)` — the single value of set `s`, or `fallback` when empty
 - `e.rel` — the set of values of relation `rel` on entity `e`
 
 Common expression forms: `list.map(x, expr)`, `list.filter(x, cond)`,
