@@ -117,7 +117,8 @@ Everything TWL adds on top of the borrowed specs lives here, so the trust surfac
 stays small enough to audit at a glance.
 
 - CEL. The stock standard environment plus the macros
-  `has all exists exists_one map filter`, and no extensions. The only additions
+  `has all exists exists_one map filter` and the CEL `math` extension, and no
+  other extensions. The only additions
   are the Computation context above (`self`, `now`, `instances`, `sortBy`,
   `one`) and the entity type itself, whose field access is total — reading any
   relation yields a list, never CEL's native missing-field error.

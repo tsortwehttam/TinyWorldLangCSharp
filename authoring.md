@@ -90,6 +90,10 @@ Common expression forms: `list.map(x, expr)`, `list.filter(x, cond)`,
 `x in list`, `list.exists(x, cond)`, `list.all(x, cond)`, `size(list)`,
 `cond ? a : b`.
 
+Math helpers are available under `math.`: `math.greatest(a, b)` (max),
+`math.least(a, b)` (min), `math.abs`, `math.floor`, `math.ceil`, `math.round`,
+`math.sqrt`, and more. Clamp a value with `math.least(math.greatest(x, lo), hi)`.
+
 Numbers are not converted automatically: do not mix integers and decimals in one
 operation.
 
