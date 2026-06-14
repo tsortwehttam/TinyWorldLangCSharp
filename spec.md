@@ -33,7 +33,7 @@ lossless).
 
 - Identifier = CEL id `[A-Za-z_][A-Za-z0-9_]*`, not a reserved word → usable
   inside CEL unchanged.
-- Reserved: `instanceof extends sameas true false null self now instances sortBy one`.
+- Reserved: `instanceof extends sameas true false null self now instances sortBy one rand`.
 
 ## Entities & relations
 
@@ -76,6 +76,9 @@ Text after `=` is CEL, verbatim, evaluated lazily. For each
 - `one(s, fallback)` — as `one(s)`, but yields `fallback` instead of `null` when
   `s` is empty
 - `e.r` — the set of values of relation `r` on entity `e`
+- `rand(x)` — a deterministic double in `[0, 1)` from the evaluation seed and the
+  canonical encoding of `x` (see profile); pass a key unique to the draw, e.g.
+  `rand([self, "hp"])`
 
 No implicit numeric coercion. Every operation is plain CEL, for example:
 
@@ -94,6 +97,28 @@ several types), one must win. Resolving a relation's value:
    fallback.
 3. Ties error, never silent: incomparable TYPEs = conflict; two defs of the same
    TYPE+RELATION = duplicate.
+
+## Evaluation & frames
+
+An evaluation resolves derived relations against the graph in an environment the
+host supplies and freezes for that evaluation:
+
+- `now` — the current timestamp.
+- a random seed — consumed by `rand` (see profile); never read directly, so
+  untrusted content cannot set it.
+
+Beyond the persisted graph, the host may overlay **transient facts** for a single
+evaluation — for example per-agent inputs or a turn counter. These are ordinary
+stored facts: read through relations, subject to precedence (a transient stored
+input overrides a derived default), and discarded after the evaluation rather
+than persisted. Which entity and relations carry them is host convention; TWL
+reserves no names for them.
+
+TWL performs no iteration or mutation. Advancing a world over time is the host's
+loop: it evaluates designated derived relations, applies their results as stored
+facts, supplies the next environment and transient facts, and re-evaluates.
+Output is a deterministic function of the graph evaluated (transient facts
+included) and the environment.
 
 ## Presentation (Mustache)
 
@@ -136,6 +161,14 @@ stays small enough to audit at a glance.
   empty or mixed-type key is an error. Rendered to text: bool becomes
   `true`/`false`, int its decimal, double its shortest round-tripping decimal,
   null the empty string.
+- PRNG. `rand(x)` is deterministic: canonically encode the pair `(seed, x)` to
+  bytes — entities as their canonical id, scalars as their rendered text form
+  (above), lists element-wise in order, each element tagged by kind and
+  length-prefixed — take `SHA-256`, then read the leading 53 bits big-endian as
+  an integer `n` and return `n × 2⁻⁵³`, a double in `[0, 1)`. The seed is the
+  host-provided evaluation seed. Because the encoding uses canonical ids and
+  values, draws are stable across `sameas` merge and the RDF round-trip. For an
+  integer in `[0, k)` use `int(rand(x) * k)` with `k` a double (e.g. `6.0`).
 - RDF. Entities become IRIs under a host-fixed base; literals map to the matching
   xsd datatypes.
 
@@ -148,7 +181,8 @@ stays small enough to audit at a glance.
   conformance suite.
 - The only semantics TWL defines itself are: the statement grammar, total
   set-valued relations, the three built-in relations' RDF aliasing, value
-  precedence, and the determinism rules in the embedding profile.
+  precedence, the evaluation environment (`now`, seed) and frame model, the
+  `rand` construction, and the determinism rules in the embedding profile.
 
 ## Example
 

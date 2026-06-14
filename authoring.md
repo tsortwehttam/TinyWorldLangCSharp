@@ -37,7 +37,7 @@ An identifier is a letter or `_` followed by letters, digits, or `_`:
 `Marty`, `born_year`, `McFlyFam`.
 
 These words are reserved and cannot be used as entity names:
-`instanceof  extends  sameas  true  false  null  self  now  instances  sortBy  one`.
+`instanceof  extends  sameas  true  false  null  self  now  instances  sortBy  one  rand`.
 
 ## Entities and relations
 
@@ -85,6 +85,8 @@ expression you have:
 - `one(s)` — the single value of set `s`, or `null` when empty
 - `one(s, fallback)` — the single value of set `s`, or `fallback` when empty
 - `e.rel` — the set of values of relation `rel` on entity `e`
+- `rand(key)` — a stable random number in `[0, 1)` for `key` (see
+  [Randomness and per-turn facts](#randomness-and-per-turn-facts))
 
 Common expression forms: `list.map(x, expr)`, `list.filter(x, cond)`,
 `x in list`, `list.exists(x, cond)`, `list.all(x, cond)`, `size(list)`,
@@ -102,6 +104,24 @@ Person age      = now.getFullYear() - one(self.bornYear) ;
 Person lastName = self.family.map(f, one(f.name)) ;
 Person enemies  = instances(Person).filter(p, McFlyFam in p.family && self != p) ;
 Person eldest   = sortBy(self.children, "bornYear") ;
+```
+
+## Randomness and per-turn facts
+
+Some facts come from the running game rather than being written into the world.
+Each turn the game can provide things like the current time (`now`), player or
+agent inputs, and a turn counter. Inputs arrive as ordinary facts, so you read
+them like any other relation — if the game records an action as `Mac input Jump ;`,
+a rule can read `self.input`.
+
+For randomness, use `rand(key)`. It returns a number from `0` up to (but not
+including) `1`, and it is **stable**: the same key always gives the same number,
+so worlds stay reproducible. Pass a key unique to the draw you want — usually the
+entity plus a label — and different labels give independent draws:
+
+```
+Chest gold = int(rand([self, "gold"]) * 100.0) ;      // 0..99
+Die   roll = int(rand([self, "roll"]) * 6.0) + 1 ;    // 1..6
 ```
 
 ## Which value wins
