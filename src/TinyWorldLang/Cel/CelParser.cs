@@ -240,9 +240,19 @@ namespace TinyWorldLang.Cel
                         i++;
                     }
                     string num = s.Substring(start, i - start);
-                    Value v = isDouble
-                        ? Value.Double(double.Parse(num, CultureInfo.InvariantCulture))
-                        : Value.Int(long.Parse(num, CultureInfo.InvariantCulture));
+                    Value v;
+                    if (isDouble)
+                    {
+                        if (!double.TryParse(num, NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
+                            throw new CelException($"invalid number '{num}'");
+                        v = Value.Double(d);
+                    }
+                    else
+                    {
+                        if (!long.TryParse(num, NumberStyles.Integer, CultureInfo.InvariantCulture, out var n))
+                            throw new CelException($"invalid integer '{num}'");
+                        v = Value.Int(n);
+                    }
                     toks.Add(new Tok(TokType.Number, num, v));
                     continue;
                 }

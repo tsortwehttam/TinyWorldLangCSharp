@@ -94,7 +94,7 @@ namespace TinyWorldLang.Values
             ? _double
             : throw new InvalidOperationException($"value is {Kind}, not Double");
 
-        /// <summary>Numeric value as a double, accepting either Int or Double. Used only for comparison.</summary>
+        /// <summary>Numeric value as a double, accepting either Int or Double. Intended for display/tests; comparisons stay exact.</summary>
         public double NumericValue => Kind switch
         {
             ValueKind.Int => _int,
@@ -126,7 +126,7 @@ namespace TinyWorldLang.Values
         public bool Equals(Value other)
         {
             if (IsNumber && other.IsNumber)
-                return NumericValue == other.NumericValue;
+                return NumericEquals(this, other);
             if (Kind != other.Kind)
                 return false;
             return Kind switch
@@ -147,6 +147,67 @@ namespace TinyWorldLang.Values
             for (int i = 0; i < a.Count; i++)
                 if (!a[i].Equals(b[i])) return false;
             return true;
+        }
+
+        internal static bool NumericEquals(Value a, Value b)
+        {
+            if (!a.IsNumber || !b.IsNumber)
+                throw new InvalidOperationException("both values must be numeric");
+            if (a.Kind == ValueKind.Int && b.Kind == ValueKind.Int)
+                return a.AsInt == b.AsInt;
+            if (a.Kind == ValueKind.Double && b.Kind == ValueKind.Double)
+                return a.AsDouble == b.AsDouble;
+            return CompareNumeric(a, b) == 0;
+        }
+
+        internal static int CompareNumeric(Value a, Value b)
+        {
+            if (!a.IsNumber || !b.IsNumber)
+                throw new InvalidOperationException("both values must be numeric");
+            if (a.Kind == ValueKind.Int && b.Kind == ValueKind.Int)
+                return a.AsInt.CompareTo(b.AsInt);
+            if (a.Kind == ValueKind.Double && b.Kind == ValueKind.Double)
+                return a.AsDouble.CompareTo(b.AsDouble);
+            if (a.Kind == ValueKind.Int)
+                return CompareLongToDouble(a.AsInt, b.AsDouble);
+            return -CompareLongToDouble(b.AsInt, a.AsDouble);
+        }
+
+        internal static bool TryGetExactInt64(double d, out long value)
+        {
+            value = 0;
+            if (double.IsNaN(d) || double.IsInfinity(d))
+                return false;
+            if (d < long.MinValue || d >= 9223372036854775808.0)
+                return false;
+            var truncated = Math.Truncate(d);
+            if (truncated != d)
+                return false;
+            value = (long)d;
+            return (double)value == d;
+        }
+
+        private static int CompareLongToDouble(long i, double d)
+        {
+            if (double.IsNaN(d))
+                return 1;
+            if (double.IsNegativeInfinity(d))
+                return 1;
+            if (double.IsPositiveInfinity(d))
+                return -1;
+            if (d < long.MinValue)
+                return 1;
+            if (d >= 9223372036854775808.0)
+                return -1;
+
+            long whole = (long)d;
+            int cmp = i.CompareTo(whole);
+            if (cmp != 0) return cmp;
+
+            double wholeAsDouble = whole;
+            if (d > wholeAsDouble) return -1;
+            if (d < wholeAsDouble) return 1;
+            return 0;
         }
 
         public override bool Equals(object? obj) => obj is Value v && Equals(v);

@@ -46,14 +46,14 @@ namespace TinyWorldLang.Parsing
         private Statement ParseStatement()
         {
             int line = _line;
-            string first = ParseIdentifier("subject/type");
+            string first = ParseEntityIdentifier("subject/type");
             SkipTrivia();
             string relation = ParseIdentifier("relation");
 
             if (TryBuiltinRelation(relation, out var builtin))
             {
                 SkipTrivia();
-                string right = ParseIdentifier("entity");
+                string right = ParseEntityIdentifier("entity");
                 ExpectSemicolon();
                 return new StructuralFact(first, builtin, right, line);
             }
@@ -111,6 +111,8 @@ namespace TinyWorldLang.Parsing
                 case "null":
                     throw new TwlLoadException("null is never a stored value", _line);
                 default:
+                    if (Reserved.Contains(id))
+                        throw new TwlLoadException($"'{id}' is reserved and cannot be used as an entity name", _line);
                     return Value.Entity(id);
             }
         }
@@ -212,6 +214,14 @@ namespace TinyWorldLang.Parsing
             int start = _pos;
             while (!AtEnd && (char.IsLetterOrDigit(Cur) || Cur == '_')) Advance();
             return _src.Substring(start, _pos - start);
+        }
+
+        private string ParseEntityIdentifier(string what)
+        {
+            string id = ParseIdentifier(what);
+            if (Reserved.Contains(id))
+                throw new TwlLoadException($"'{id}' is reserved and cannot be used as an entity name", _line);
+            return id;
         }
 
         private void ExpectSemicolon()

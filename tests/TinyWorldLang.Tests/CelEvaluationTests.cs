@@ -42,6 +42,46 @@ namespace TinyWorldLang.Tests
         }
 
         [Fact]
+        public void InvalidComputedExpression_IsLoadError()
+        {
+            var ex = Assert.Throws<TwlLoadException>(() => TwlWorld.Load(@"
+                T extends Entity; X instanceof T;
+                T bad = 1 + ;
+            "));
+            Assert.Contains("bad", ex.Message);
+        }
+
+        [Fact]
+        public void InvalidComputedNumber_IsLoadError()
+        {
+            Assert.Throws<TwlLoadException>(() => TwlWorld.Load(@"
+                T extends Entity; X instanceof T;
+                T bad = 1..2;
+            "));
+        }
+
+        [Fact]
+        public void WrongArity_IsTwlEvalException()
+        {
+            var world = TwlWorld.Load(@"
+                T extends Entity; X instanceof T;
+                T bad = now.getFullYear(1);
+            ");
+            var ex = Assert.Throws<TwlEvalException>(() => world.Evaluate().Entity("X")["bad"].One());
+            Assert.Contains("getFullYear", ex.Message);
+        }
+
+        [Fact]
+        public void NumericComparisons_KeepLargeIntegersExact()
+        {
+            var world = TwlWorld.Load(@"
+                T extends Entity; X instanceof T;
+                T precise = 9007199254740993 > 9007199254740992.0;
+            ");
+            Assert.True(world.Evaluate().Entity("X")["precise"].AsBool);
+        }
+
+        [Fact]
         public void FilterExistsAndMembership_ComputeRelations()
         {
             var world = TwlWorld.Load(@"

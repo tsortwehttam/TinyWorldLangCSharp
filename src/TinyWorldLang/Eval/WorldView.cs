@@ -128,7 +128,17 @@ namespace TinyWorldLang.Eval
             {
                 var program = Compile(rule);
                 var ctx = new Context(this, Value.Entity(entity));
-                Value result = program.Evaluate(ctx);
+                Value result;
+                try
+                {
+                    result = program.Evaluate(ctx);
+                }
+                catch (CelException ex)
+                {
+                    throw new TwlEvalException(
+                        $"in rule '{rule.Type} {rule.Relation}' on '{entity}': {ex.Message}",
+                        ex);
+                }
                 var set = Coerce(result);
                 _memo[key] = set;
                 return set;

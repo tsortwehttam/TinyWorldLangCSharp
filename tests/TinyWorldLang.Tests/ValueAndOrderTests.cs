@@ -16,6 +16,21 @@ namespace TinyWorldLang.Tests
         }
 
         [Fact]
+        public void LargeIntegers_AreComparedAndDeduplicatedExactly()
+        {
+            var a = Value.Int(9007199254740992L);
+            var b = Value.Int(9007199254740993L);
+
+            Assert.False(a.Equals(b));
+            Assert.False(b.Equals(Value.Double(9007199254740992.0)));
+
+            var set = ValueSet.From(new[] { b, a, Value.Double(9007199254740992.0) });
+            Assert.Equal(2, set.Count);
+            Assert.Equal(9007199254740992L, set[0].AsInt);
+            Assert.Equal(9007199254740993L, set[1].AsInt);
+        }
+
+        [Fact]
         public void DifferentKinds_AreNeverEqual_NotAnError()
         {
             Assert.False(Value.Int(1).Equals(Value.String("1")));

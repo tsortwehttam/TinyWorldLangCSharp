@@ -47,7 +47,7 @@ namespace TinyWorldLang.Values
                     return a.AsBool.CompareTo(b.AsBool); // false < true
                 case ValueKind.Int:
                 case ValueKind.Double:
-                    return a.NumericValue.CompareTo(b.NumericValue);
+                    return Value.CompareNumeric(a, b);
                 case ValueKind.String:
                     return string.CompareOrdinal(a.AsString, b.AsString);
                 case ValueKind.Entity:

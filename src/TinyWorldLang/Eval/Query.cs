@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using TinyWorldLang;
 using TinyWorldLang.Values;
 
 namespace TinyWorldLang.Eval
@@ -85,10 +86,10 @@ namespace TinyWorldLang.Eval
 
         // -------- single-value typed accessors (operate on the canonical-first value) --------
 
-        public long AsInt => One().AsInt;
-        public double AsDouble => One().AsDouble;
-        public bool AsBool => One().AsBool;
-        public string AsEntity => One().AsEntity;
+        public long AsInt => RequireOne(ValueKind.Int).AsInt;
+        public double AsDouble => RequireOne(ValueKind.Double).AsDouble;
+        public bool AsBool => RequireOne(ValueKind.Bool).AsBool;
+        public string AsEntity => RequireOne(ValueKind.Entity).AsEntity;
 
         /// <summary>
         /// The presentation text of the canonical-first value. A string value is
@@ -110,11 +111,19 @@ namespace TinyWorldLang.Eval
         /// Escape hatch: the raw, unrendered template source of a string value. Prefer
         /// <see cref="Text"/> almost always — this exists for debugging and tooling.
         /// </summary>
-        public string Source => One().AsString;
+        public string Source => RequireOne(ValueKind.String).AsString;
 
         public override string ToString() => Text;
 
         public IEnumerator<Value> GetEnumerator() => Set.GetEnumerator();
         IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+        private Value RequireOne(ValueKind kind)
+        {
+            var v = One();
+            if (v.Kind == kind) return v;
+            throw new TwlEvalException(
+                $"field '{_relation}' on '{_owner}' is {v.Kind}, not {kind}");
+        }
     }
 }

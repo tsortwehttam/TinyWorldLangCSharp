@@ -153,7 +153,7 @@ namespace TinyWorldLang.Cel
         private static Value Compare(string op, Value l, Value r)
         {
             int cmp;
-            if (l.IsNumber && r.IsNumber) cmp = l.NumericValue.CompareTo(r.NumericValue);
+            if (l.IsNumber && r.IsNumber) cmp = Value.CompareNumeric(l, r);
             else if (l.Kind == ValueKind.String && r.Kind == ValueKind.String) cmp = string.CompareOrdinal(l.AsString, r.AsString);
             else throw new CelException($"cannot compare {l.Kind} and {r.Kind} with '{op}'");
             switch (op)
@@ -277,22 +277,25 @@ namespace TinyWorldLang.Cel
             {
                 case "one":
                 {
+                    RequireArgCount(c, 1, 2);
                     var set = AsList(Eval(c.Args[0], scope, ctx), "one");
                     if (set.Count > 0) return set[0];
                     return c.Args.Count > 1 ? Eval(c.Args[1], scope, ctx) : Value.Null;
                 }
                 case "size":
                 {
+                    RequireArgCount(c, 1);
                     var v = Eval(c.Args[0], scope, ctx);
                     if (v.Kind == ValueKind.List) return Value.Int(v.AsList.Count);
                     if (v.Kind == ValueKind.String) return Value.Int(v.AsString.Length);
                     throw new CelException("size() requires a list or string");
                 }
-                case "int": return ToInt(Eval(c.Args[0], scope, ctx));
-                case "double": return ToDouble(Eval(c.Args[0], scope, ctx));
-                case "string": return Value.String(Eval(c.Args[0], scope, ctx).ToString());
+                case "int": RequireArgCount(c, 1); return ToInt(Eval(c.Args[0], scope, ctx));
+                case "double": RequireArgCount(c, 1); return ToDouble(Eval(c.Args[0], scope, ctx));
+                case "string": RequireArgCount(c, 1); return Value.String(Eval(c.Args[0], scope, ctx).ToString());
                 case "bool":
                 {
+                    RequireArgCount(c, 1);
                     var v = Eval(c.Args[0], scope, ctx);
                     if (v.Kind == ValueKind.Bool) return v;
                     if (v.Kind == ValueKind.String)
@@ -304,11 +307,12 @@ namespace TinyWorldLang.Cel
                 }
                 case "instances":
                 {
+                    RequireArgCount(c, 1);
                     string type = c.Args[0] is CelIdent id ? id.Name : Eval(c.Args[0], scope, ctx).AsEntity;
                     return Value.List(new List<Value>(ctx.Instances(type)));
                 }
-                case "sortBy": return EvalSortBy(c, scope, ctx);
-                case "rand": return Value.Double(ctx.Rand(Eval(c.Args[0], scope, ctx)));
+                case "sortBy": RequireArgCount(c, 2); return EvalSortBy(c, scope, ctx);
+                case "rand": RequireArgCount(c, 1); return Value.Double(ctx.Rand(Eval(c.Args[0], scope, ctx)));
                 default:
                     throw new CelException($"unknown function '{c.Name}(...)'");
             }
@@ -387,15 +391,15 @@ namespace TinyWorldLang.Cel
 
             switch (c.Name)
             {
-                case "greatest": { var a = A(); var b = B(); return CanonicalComparer.Instance.Compare(a, b) >= 0 ? a : b; }
-                case "least": { var a = A(); var b = B(); return CanonicalComparer.Instance.Compare(a, b) <= 0 ? a : b; }
-                case "abs": { var a = A(); return a.Kind == ValueKind.Int ? Value.Int(Math.Abs(a.AsInt)) : Value.Double(Math.Abs(D(a))); }
-                case "sign": { var a = A(); return Value.Int(Math.Sign(D(a))); }
-                case "floor": return Value.Double(Math.Floor(D(A())));
-                case "ceil": return Value.Double(Math.Ceiling(D(A())));
-                case "round": return Value.Double(Math.Round(D(A()), MidpointRounding.AwayFromZero));
-                case "trunc": return Value.Double(Math.Truncate(D(A())));
-                case "sqrt": return Value.Double(Math.Sqrt(D(A())));
+                case "greatest": { RequireArgCount(c, 2); var a = A(); var b = B(); return CanonicalComparer.Instance.Compare(a, b) >= 0 ? a : b; }
+                case "least": { RequireArgCount(c, 2); var a = A(); var b = B(); return CanonicalComparer.Instance.Compare(a, b) <= 0 ? a : b; }
+                case "abs": { RequireArgCount(c, 1); var a = A(); return a.Kind == ValueKind.Int ? Value.Int(Math.Abs(a.AsInt)) : Value.Double(Math.Abs(D(a))); }
+                case "sign": { RequireArgCount(c, 1); var a = A(); return Value.Int(Math.Sign(D(a))); }
+                case "floor": RequireArgCount(c, 1); return Value.Double(Math.Floor(D(A())));
+                case "ceil": RequireArgCount(c, 1); return Value.Double(Math.Ceiling(D(A())));
+                case "round": RequireArgCount(c, 1); return Value.Double(Math.Round(D(A()), MidpointRounding.AwayFromZero));
+                case "trunc": RequireArgCount(c, 1); return Value.Double(Math.Truncate(D(A())));
+                case "sqrt": RequireArgCount(c, 1); return Value.Double(Math.Sqrt(D(A())));
                 default:
                     throw new CelException($"unknown math helper 'math.{c.Name}'");
             }
@@ -403,6 +407,7 @@ namespace TinyWorldLang.Cel
 
         private static Value EvalNowMethod(CelCall c, Scope scope, ICelContext ctx)
         {
+            RequireArgCount(c, 0);
             // Date components, read in UTC (the spec's default).
             var t = ctx.Now.ToUniversalTime();
             switch (c.Name)
@@ -441,6 +446,23 @@ namespace TinyWorldLang.Cel
             if (v.Kind == ValueKind.Bool) return v.AsBool;
             throw new CelException($"{who}() predicate must be a bool");
         }
+
+        private static void RequireArgCount(CelCall c, int count)
+        {
+            if (c.Args.Count != count)
+                throw new CelException($"{CallName(c)} takes {count} argument{(count == 1 ? "" : "s")}");
+        }
+
+        private static void RequireArgCount(CelCall c, int min, int max)
+        {
+            if (c.Args.Count < min || c.Args.Count > max)
+                throw new CelException($"{CallName(c)} takes {min} to {max} arguments");
+        }
+
+        private static string CallName(CelCall c) =>
+            c.Target == null
+                ? $"{c.Name}(...)"
+                : $".{c.Name}(...)";
 
         private static Value ToInt(Value v)
         {

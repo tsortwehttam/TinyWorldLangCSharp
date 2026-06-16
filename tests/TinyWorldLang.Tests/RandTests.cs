@@ -45,6 +45,14 @@ namespace TinyWorldLang.Tests
         }
 
         [Fact]
+        public void LargeIntegerKeys_DoNotCollapseThroughDoubleRounding()
+        {
+            Assert.NotEqual(
+                StableHash.Hash(5, Value.Int(9007199254740993L)),
+                StableHash.Hash(5, Value.Double(9007199254740992.0)));
+        }
+
+        [Fact]
         public void Rand_InComputedRule_IsReproducible()
         {
             var world = TwlWorld.Load(@"

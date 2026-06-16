@@ -8,45 +8,37 @@ moment. It is **not** a renderer, a game engine, or a content pack. A TWL world 
 are written down directly; others are *computed* from the rest of the world with
 [CEL](https://cel.dev/) expressions.
 
-This repository is the **C# implementation** plus an **in-process query API** for C#
+```
+Person extends Entity;
+Family extends Entity;
+
+Person age      = now.getFullYear() - one(self.bornYear);
+Person lastName = one(one(self.family).name);
+
+McFlyFam instanceof Family; McFlyFam name "McFly";
+
+Marty instanceof Person; Marty firstName "Marty";
+Marty bornYear 1968; Marty family McFlyFam;
+```
+
+This repository is the **C# implementation** plus an in-process LINQ query API for C#
 consumers (Unity, MonoGame, console, desktop). The engine is a pure function —
 `eval(world, session, env) → values` — so the same inputs always produce the same values,
-and a host can stay stateless.
-
-```csharp
-using TinyWorldLang;        // TwlWorld
-using TinyWorldLang.Eval;   // Env, Session, Entity, Field
-
-var world = TwlWorld.Load(source);          // parse + validate once, then cache it
-var view  = world.Evaluate(session, env);   // eval(world, session, env) -> values
-
-// One general way to query: entity handles + standard LINQ.
-var threats = view.Entities("Person")
-    .Where(p => p["age"].AsInt > 40)
-    .Select(p => new { p.Name, Bio = p["persona"].Text });
-```
+and a host can stay stateless. Jump to [the language](#the-language) for the authoring
+reference, or [the C# engine](#c-engine--query-api) to embed it.
 
 ---
 
 ## Contents
 
 - [Overview](#overview)
-- [Quick start (C#)](#quick-start-c)
-- [Requirements & install](#requirements--install)
-- [C# API guide](#c-api-guide)
-  - [Loading a world](#loading-a-world)
-  - [The environment and session](#the-environment-and-session)
-  - [Querying: entities, fields, LINQ](#querying-entities-fields-linq)
-  - [Value types](#value-types)
-  - [Rendering and escaping](#rendering-and-escaping)
-  - [Errors](#errors)
-  - [Swapping the CEL backend (advanced)](#swapping-the-cel-backend-advanced)
 - [The language](#the-language)
   - [Statements](#statements) · [Values](#values) · [Names](#names) ·
     [Entities and relations](#entities-and-relations) · [Order within a set](#order-within-a-set) ·
     [Types and identity](#types-and-identity) · [Computed facts](#computed-facts) ·
     [Evaluation model](#evaluation-model) · [Events](#events) · [Randomness](#randomness) ·
     [Tiebreaks](#tiebreaks) · [Templates](#templates) · [Example](#example)
+- [C# engine & query API](#c-engine--query-api)
 - [Design & platform notes](#design--platform-notes)
 - [Project layout](#project-layout)
 - [Building & testing](#building--testing)
@@ -83,242 +75,9 @@ evaluate — there is nothing else to restore.
 
 ---
 
-## Quick start (C#)
-
-```csharp
-using System;
-using TinyWorldLang;
-using TinyWorldLang.Eval;
-
-const string source = @"
-    Person extends Entity;
-    Family extends Entity;
-
-    Person age      = now.getFullYear() - one(self.bornYear);
-    Person lastName = one(one(self.family).name);
-
-    McFlyFam instanceof Family; McFlyFam name ""McFly"";
-
-    Marty instanceof Person; Marty firstName ""Marty"";
-    Marty bornYear 1968; Marty family McFlyFam;
-
-    Lorraine instanceof Person; Lorraine firstName ""Lorraine"";
-    Lorraine bornYear 1949; Lorraine family McFlyFam;
-";
-
-var world = TwlWorld.Load(source);
-var view  = world.Evaluate(env: new Env(new DateTimeOffset(1985, 10, 26, 0, 0, 0, TimeSpan.Zero)));
-
-// A single value:
-int age = view.Entity("Marty")["age"].AsInt;          // 17
-
-// A rendered string value:
-string last = view.Entity("Marty")["lastName"].Text;  // "McFly"
-
-// A record per entity of a type, with LINQ:
-var people = view.Entities("Person")
-    .Select(p => new { p.Name, First = p["firstName"].Text, Age = p["age"].AsInt });
-```
-
----
-
-## Requirements & install
-
-- The engine (`src/TinyWorldLang`) targets **`netstandard2.0`** with **zero third-party
-  runtime dependencies**, so it drops into Unity (Mono **and** IL2CPP/AOT), MonoGame,
-  consoles, WebGL, and desktop unchanged.
-- No NuGet package is published yet. Reference the project directly, or drop the
-  `src/TinyWorldLang/*.cs` sources into your game project / Unity `Assets`.
-- Building and running the tests needs the **.NET 8 SDK** (test projects target `net8.0`).
-  The engine itself does not require .NET 8.
-
-See [Design & platform notes](#design--platform-notes) for why these constraints exist.
-
----
-
-## C# API guide
-
-Namespaces: `TinyWorldLang` (entry point, exceptions), `TinyWorldLang.Eval` (querying,
-environment, session), `TinyWorldLang.Values` (`Value`, `ValueSet`), `TinyWorldLang.Cel`
-(the CEL backend seam).
-
-### Loading a world
-
-```csharp
-TwlWorld TwlWorld.Load(
-    string source,
-    ICelEvaluator? cel = null,           // defaults to the AOT-safe tree-walking evaluator
-    Func<string,string>? escaper = null) // applied to {{ }} template output; default: none
-```
-
-`Load` parses and validates the world **once** (it throws
-[`TwlLoadException`](#errors) on syntax errors, `extends` cycles, etc.). The world is
-immutable — cache the `TwlWorld` and reuse it for the whole game.
-
-### The environment and session
-
-```csharp
-WorldView TwlWorld.Evaluate(Session? session = null, Env? env = null)
-```
-
-`Evaluate` returns a `WorldView` — the materialization of `eval(world, session, env)`. Create
-a fresh view per query batch; computed values are memoized for the life of the view.
-
-```csharp
-// Env: now is frozen (UTC) for the whole evaluation; seed drives rand; turn is a counter.
-var env = new Env(now: DateTimeOffset.UtcNow, seed: 42, turn: 3);
-
-// Session: an append-only stream of host-shaped events, read by CEL under `session`.
-using TinyWorldLang.Values;
-
-var events = new[]
-{
-    new Event(new Dictionary<string, Value>
-    {
-        ["actor"]  = Value.Entity("Marty"),
-        ["target"] = Value.Entity("Biff"),
-        ["verb"]   = Value.String("insult"),
-    }),
-};
-
-var view = world.Evaluate(Session.OfEvents(events), env);
-```
-
-The `seed` cannot be read or set from inside the world. Events are *data*, not facts: they
-live in their own `session` namespace and never mix into the fact graph.
-
-### Querying: entities, fields, LINQ
-
-There is **one** entry point — entity handles — and everything else is standard
-LINQ-to-objects you already know.
-
-```csharp
-IEnumerable<Entity> view.Entities();          // every entity in the world
-IEnumerable<Entity> view.Entities(string type) // every instance of a type (incl. subtypes)
-Entity              view.Entity(string name);  // a handle to one entity (by name)
-```
-
-```csharp
-public sealed class Entity
-{
-    string             Name { get; }            // canonical name (after any `sameas` merge)
-    bool               Is(string type);         // instance of type, directly or via a subtype?
-    Field              this[string relation];   // read a relation
-    IReadOnlyList<string> Relations { get; }    // declared relation names (no evaluation)
-}
-```
-
-```csharp
-public readonly struct Field : IReadOnlyList<Value>  // the relation's current set
-{
-    bool   IsEmpty { get; }
-    bool   HasValue { get; }
-    int    Count { get; }
-    Value  One();                       // canonical-first value, or null when empty
-
-    // single-value typed accessors (operate on the canonical-first value)
-    long   AsInt { get; }
-    double AsDouble { get; }
-    bool   AsBool { get; }
-    string AsEntity { get; }
-
-    string  Text { get; }               // presentation text; STRING VALUES ARE RENDERED
-    IEnumerable<string> Texts { get; }  // presentation text for every value in the set
-    string  Source { get; }             // escape hatch: raw, unrendered template source
-
-    IReadOnlyList<Entity> Entities { get; }  // entity-valued members as handles
-    ValueSet Values { get; }                 // the whole set, raw
-}
-```
-
-Reading a relation is never an error: an absent relation is an empty `Field`. The
-record-oriented patterns fall straight out of LINQ:
-
-```csharp
-// "such-and-such fields from every entity matching a condition"
-var elders = view.Entities("Person")
-    .Where(p => p["age"].AsInt >= 50)
-    .Select(p => new { p.Name, Bio = p["persona"].Text })
-    .OrderBy(x => x.Name);
-
-// "every relation on one entity" — generic, no field names hardcoded
-var biff = view.Entity("Biff");
-var record = biff.Relations.ToDictionary(r => r, r => biff[r].Text);
-
-// multi-valued relations
-foreach (Entity member in view.Entity("McFlyFam")["member"].Entities)
-    Console.WriteLine(member.Name);
-```
-
-> It is LINQ-**to-objects** (`IEnumerable`), never `IQueryable` with expression trees, so
-> nothing is JIT-compiled at query time — it stays AOT-safe on consoles and WebGL.
-
-### Value types
-
-A `Field` is a set of `Value`s (in [canonical order](#order-within-a-set)). `Value` is a
-small struct:
-
-```csharp
-ValueKind Kind { get; }   // Null, Bool, Int, Double, String, Entity (+ eval-time List/Record/Timestamp)
-bool   IsNull { get; }
-bool   IsNumber { get; }   // Int or Double
-bool   AsBool { get; }
-long   AsInt { get; }
-double AsDouble { get; }
-double NumericValue { get; } // Int or Double, as double (for comparison)
-string AsString { get; }     // raw string source (use Field.Text for rendered output)
-string AsEntity { get; }     // canonical entity name
-```
-
-Integers and doubles are distinct, fixed kinds (`1968` is always an int, `1968.0` always a
-double) but **compare by value** (`1 == 1.0`). Different kinds are never equal — and that is
-not an error, just `false`. See [Values](#values) and [Computed facts](#computed-facts).
-
-### Rendering and escaping
-
-Every string value is a [Mustache template](#templates) rendered against its owning entity.
-You never have to ask "does this field contain a template?" — `Field.Text` (and
-`Field.ToString()`) always return the **rendered** result; the raw source is available only
-via `Field.Source` for debugging/tooling.
-
-TWL is a source of truth, not a renderer, so it does not assume HTML. Supply an escaper at
-load time for your output target (it is applied to `{{ }}` tags, not to `{{{ }}}` raw tags):
-
-```csharp
-var world = TwlWorld.Load(source,
-    escaper: s => s.Replace("<", "&lt;").Replace(">", "&gt;")); // an HTML escaper, for example
-```
-
-### Errors
-
-```csharp
-TwlException          // base type
-  TwlLoadException    // syntax / load-time error (parse, extends cycle, ambiguous rule); has .Line
-  TwlEvalException    // per-entity evaluation error (missing value in arithmetic, null access, …)
-```
-
-Load-time errors surface from `TwlWorld.Load`. Evaluation errors are **per-entity** and
-surface only when that entity's rule is read — so a bad rule can hide until a specific entity
-is queried. (CEL syntax errors are reported as `TwlLoadException` on first read of the rule.)
-
-### Swapping the CEL backend (advanced)
-
-The CEL evaluator sits behind a seam. The default
-[`TreeWalkingCelEvaluator`](src/TinyWorldLang/Cel/TreeWalkingCelEvaluator.cs) is AOT-safe and
-needs no dependencies. A host on a JIT-only platform may inject a different backend:
-
-```csharp
-public interface ICelEvaluator { ICelProgram Compile(string source); }
-public interface ICelProgram   { Value Evaluate(ICelContext context); }
-
-var world = TwlWorld.Load(source, cel: new MyCelBackend());
-```
-
----
-
 ## The language
 
-> The authoring reference. Worlds are written in this surface syntax; the C# API above reads
+> The authoring reference. Worlds are written in this surface syntax; the C# engine below reads
 > the result.
 
 ### Statements
@@ -344,7 +103,11 @@ A `VALUE` is one of:
 - boolean — `true`, `false`
 - string — `"..."` — a Mustache template (see [Templates](#templates)), rendered against the owning entity when read; may span multiple lines. Text with no `{{` tags renders to itself, so an ordinary value like `"Marty"` is just its literal text
 
-There is one string type and it is always a template. This is safe because every stored string is author content — untrusted player text lives in the session event stream, never in facts (see [Evaluation model](#evaluation-model)), so it is never parsed as world source and never rendered as a template.
+There is one string type and it is always a template. Stored strings are author content.
+Session text is never parsed as world source, but if a computed relation returns a session
+string and that relation is rendered, it follows the same template-rendering rules as any
+other string. Treat untrusted strings as untrusted output: use an escaper, avoid raw tags,
+or keep player-authored text outside template-rendered relations.
 
 A value runs from its opening `"` to the next unescaped `"`, so a `;`, newline, or `{{` inside is ordinary text and does not end the value or the statement. Backslash escapes: `\"` (literal `"`), `\{` (literal `{`, which cannot begin a tag — write `\{\{` for a literal `{{`), `\\` (literal backslash), `\n`, `\t`. A backslash before anything else is an error, so an accidental `\` is caught rather than swallowed.
 
@@ -392,7 +155,7 @@ A `sameas` collapses two entities into one: they share all their facts, `==` tre
 After `=` you write an expression in CEL (Common Expression Language). The rule runs for every entity that is an instance of the named type — including instances of its subtypes, since `instanceof` is transitive through `extends` (if `Wizard extends Person`, every `Wizard` is a `Person`) — and is evaluated only when its value is needed. Inside the expression you have:
 
 - `self` — the current entity
-- `now` — the current time (UTC), frozen for the whole evaluation so every rule sees the same instant. Its date-component methods (`getFullYear()`, `getMonth()`, …) read in UTC unless you pass a timezone, so a sim keyed on local calendar dates can be off by a day near midnight or a year boundary.
+- `now` — the current time (UTC), frozen for the whole evaluation so every rule sees the same instant. Its date-component methods (`getFullYear()`, `getMonth()`, …) read in UTC, so a sim keyed on local calendar dates can be off by a day near midnight or a year boundary unless the host supplies an appropriate UTC instant.
 - `instances(T)` — the set of all entities that are instances of `T`, directly or through a subtype
 - `sortBy(list, "rel")` — `list` ordered by the relation named `rel`. Each element is keyed by `one(element.rel)`: an element whose `rel` is empty keys as `null` and sorts before all real values; one with several values keys on its canonical-first
 - `one(s)` — the single value of set `s`, or `null` when empty
@@ -402,7 +165,7 @@ After `=` you write an expression in CEL (Common Expression Language). The rule 
 
 Common expression forms: `list.map(x, expr)`, `list.filter(x, cond)`, `x in list`, `list.exists(x, cond)`, `list.all(x, cond)`, `size(list)`, `cond ? a : b`.
 
-Math helpers are available under `math.`: `math.greatest(a, b)` (max), `math.least(a, b)` (min), `math.abs`, `math.sign`, `math.floor`, `math.ceil`, `math.round`, `math.trunc`, `math.sqrt`, and more. Clamp a value with `math.least(math.greatest(x, lo), hi)`.
+Math helpers are available under `math.`: `math.greatest(a, b)` (max), `math.least(a, b)` (min), `math.abs`, `math.sign`, `math.floor`, `math.ceil`, `math.round`, `math.trunc`, and `math.sqrt`. Clamp a value with `math.least(math.greatest(x, lo), hi)`.
 
 `instances`, `sortBy`, `one`, and `rand` are TWL's own builtins; `self`, `now`, and `e.rel` are language forms. The expression forms and `math.*` helpers come from CEL itself — a host engine may register further functions of its own, so check the developer's documentation for any extras.
 
@@ -433,11 +196,22 @@ Inputs come in two kinds plus an environment:
 - Session — the event stream the host accumulates during play: an append-only, ordered list of events. Growing, but only the host writes it — TWL never does. Events are *data*, not facts: they live in their own `session` namespace and are read through CEL, never mixed into the fact graph (see [Events](#events)).
 - Env — the per-evaluation environment: `now`, the `rand` seed (you cannot read or set it from inside the world), a turn counter, and whatever else the host passes for this one query. Not facts; reached through their own keywords and builtins. Ephemeral; gone after the call.
 
-This split is deliberate. Facts are trusted author content; the session stream is where untrusted, host-supplied content (including raw player text) lives. Because the two never merge, player text is never parsed as world source and never rendered as a template — provenance is structural, not a convention each host must remember. A "player action" is just the latest event the host appended; there is no separate action layer.
+This split is deliberate. Facts are trusted author content; the session stream is where
+untrusted, host-supplied content (including raw player text) lives. Because the two never
+merge, player text is never parsed as world source. If you derive a string relation from the
+session and render it, though, it is still a string value and is rendered as a template; keep
+that path escaped or keep untrusted text outside rendered TWL strings. A "player action" is
+just the latest event the host appended; there is no separate action layer.
 
-A rule that reads `now`, `rand`, or the session stream only works if the host provides that piece — ask the developer what their cartridge supplies.
+`now` and `rand` are always available from the evaluation environment (defaulted if the host
+does not pass one). Session streams default to empty lists when the host supplies no session
+or no stream with that name.
 
-This reproducibility holds for a given engine build. Floating-point results are bit-for-bit stable for ordinary arithmetic and the exactly-rounded helpers (`math.floor`, `math.ceil`, `math.round`, `math.trunc`, `math.abs`, `math.sign`, `math.sqrt`), but the transcendental helpers (and any host-registered functions) may differ in their last bits across platforms or library versions — don't rely on cross-machine bit-identical output from those.
+This reproducibility holds for a given engine build. Floating-point results are bit-for-bit
+stable for ordinary arithmetic and the built-in helpers (`math.floor`, `math.ceil`,
+`math.round`, `math.trunc`, `math.abs`, `math.sign`, `math.sqrt`) on the tested runtimes, but
+a host-supplied CEL backend or extra functions may differ in their last bits across platforms
+or library versions — don't rely on cross-machine bit-identical output from those.
 
 Because TWL holds no state, a server can be stateless: cache the world (it never changes), persist the session event stream between requests, and supply the environment per request. To resume a game, reload world and session and evaluate. There is nothing else to restore.
 
@@ -485,7 +259,12 @@ Every string value (`"..."`) is a Mustache template, rendered against the entity
 
 A single boolean fact is still a one-value set, so `{{# flag}}` renders for both `true` and `false`. To branch on a condition, make a computed relation that is empty when the condition is false.
 
-Names in a template resolve to the owning entity's relations. To render event-derived text, first compute a relation from the stream (`Person lastLine = session.events.filter(e, e.actor == self).map(e, e.text);`) and render that. The value is inserted as text, not re-parsed — a `{{...}}` sitting inside event text is inert, so player text cannot inject template syntax. Two cautions when that text is untrusted: `{{rel}}` escapes it with the host escaper, but `{{{rel}}}` / `{{& rel}}` bypasses the escaper entirely, so emitting raw player text is the host's escaping responsibility.
+Names in a template resolve to the owning entity's relations. To render event-derived text,
+first compute a relation from the stream (`Person lastLine = session.events.filter(e, e.actor
+== self).map(e, e.text);`) and render that. Two cautions when that text is untrusted: every
+string value is rendered as a template, so `{{...}}` inside event text can resolve against the
+owning entity; and `{{{rel}}}` / `{{& rel}}` bypasses the host escaper entirely. Prefer
+escaped `{{rel}}`, or keep raw player text outside TWL-rendered strings.
 
 ### Example
 
@@ -512,6 +291,66 @@ Biff persona "A bully with disdain for:
   - {{firstName}} {{lastName}}
 {{/}}";
 ```
+
+---
+
+## C# engine & query API
+
+The engine (`src/TinyWorldLang`) is a pure function — `eval(world, session, env) → values` —
+so the same inputs always produce the same values and a host can stay stateless. It targets
+**`netstandard2.0`** with **zero third-party runtime dependencies**, so it drops into Unity
+(Mono **and** IL2CPP/AOT), MonoGame, consoles, WebGL, and desktop unchanged. No NuGet package
+is published yet — reference the project directly, or drop the `src/TinyWorldLang/*.cs`
+sources into your game project / Unity `Assets`. (Building the tests needs the .NET 8 SDK; the
+engine itself does not.)
+
+```csharp
+using TinyWorldLang;        // TwlWorld, exceptions
+using TinyWorldLang.Eval;   // Env, Session, Entity, Field
+
+// Parse + validate once (throws TwlLoadException on errors); cache and reuse the world.
+var world = TwlWorld.Load(source);
+
+// eval(world, session, env) -> a WorldView; create a fresh view per query batch.
+var view = world.Evaluate(
+    Session.OfEvents(events),                              // append-only host events, read under `session`
+    new Env(now: DateTimeOffset.UtcNow, seed: 42, turn: 3)); // now frozen; seed drives rand; turn a counter
+
+// One way to query: entity handles + standard LINQ-to-objects.
+int    age  = view.Entity("Marty")["age"].AsInt;          // a single typed value
+string last = view.Entity("Marty")["lastName"].Text;      // string values are RENDERED templates
+
+var elders = view.Entities("Person")                      // every instance of a type (incl. subtypes)
+    .Where(p => p["age"].AsInt >= 50)
+    .Select(p => new { p.Name, Bio = p["persona"].Text });
+```
+
+Reading a relation returns a `Field` — the relation's value set in [canonical order](#order-within-a-set),
+and never an error (an absent relation is just an empty `Field`). `Field` exposes typed
+single-value accessors (`AsInt`, `AsDouble`, `AsBool`, `AsEntity`, `One()`), rendered text
+(`.Text`, `.Texts`, with `.Source` for the raw template source), and the set itself
+(`.Entities` for entity-valued members, `.Values` for the raw set). Querying is
+LINQ-**to-objects**, never `IQueryable` with expression trees — nothing is JIT-compiled at
+query time, so it stays AOT-safe on consoles and WebGL.
+
+The typed accessors are strict: they operate on the canonical-first value and throw
+`TwlEvalException` if the field is empty or the value has the wrong kind. Use `IsEmpty`,
+`Count`, `One()`, or `Values` when the shape is optional or multi-valued.
+
+Every string value is a [Mustache template](#templates) rendered against its owning entity, so
+`.Text` always returns the rendered result. Supply an escaper at load time for your output
+target (it applies to `{{ }}` tags, not `{{{ }}}` raw tags):
+
+```csharp
+var world = TwlWorld.Load(source,
+    escaper: s => s.Replace("<", "&lt;").Replace(">", "&gt;"));  // an HTML escaper, for example
+```
+
+Errors: `TwlException` is the base; `TwlLoadException` (syntax / load-time, with `.Line`)
+surfaces from `Load`; `TwlEvalException` is **per-entity** and surfaces only when that entity's
+rule is read, so missing data or another runtime failure can hide until a specific entity is queried. The CEL evaluator sits
+behind a swappable `ICelEvaluator` seam — the default tree-walking backend is AOT-safe and
+dependency-free; a host on a JIT-only platform may inject its own.
 
 ---
 

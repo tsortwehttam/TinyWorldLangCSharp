@@ -54,13 +54,15 @@ namespace TinyWorldLang.Rand
                     h = Mix(h, TagBool);
                     return Mix(h, v.AsBool ? (byte)1 : (byte)0);
                 case ValueKind.Int:
-                case ValueKind.Double:
-                    // Encode by mathematical value (as a double's bits, under one shared
-                    // tag) so int 1 and double 1.0 — equal under the spec — hash
-                    // identically. Note: longs beyond 2^53 lose precision here; keys are
-                    // expected to be small ints, entities, or strings in practice.
                     h = Mix(h, TagNumber);
-                    return MixUInt64(h, (ulong)BitConverter.DoubleToInt64Bits(v.NumericValue));
+                    return MixInt64(h, v.AsInt);
+                case ValueKind.Double:
+                    // Equal numeric keys must hash alike, so integral doubles that are
+                    // exactly representable as Int64 share the integer encoding.
+                    h = Mix(h, TagNumber);
+                    if (Value.TryGetExactInt64(v.AsDouble, out var i))
+                        return MixInt64(h, i);
+                    return MixUInt64(h, (ulong)BitConverter.DoubleToInt64Bits(v.AsDouble));
                 case ValueKind.String:
                     h = Mix(h, TagString);
                     return HashBytes(h, Encoding.UTF8.GetBytes(v.AsString));
@@ -97,6 +99,8 @@ namespace TinyWorldLang.Rand
             }
             return h;
         }
+
+        private static ulong MixInt64(ulong h, long x) => MixUInt64(h, unchecked((ulong)x));
 
         private static ulong Mix(ulong h, byte b)
         {

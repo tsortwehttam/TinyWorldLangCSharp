@@ -54,6 +54,14 @@ namespace TinyWorldLang.Tests
         }
 
         [Fact]
+        public void ReservedEntityNames_AreRejectedInEntityPositions()
+        {
+            Assert.Throws<TwlLoadException>(() => TwlParser.Parse("self r 1;"));
+            Assert.Throws<TwlLoadException>(() => TwlParser.Parse("X sameas now;"));
+            Assert.Throws<TwlLoadException>(() => TwlParser.Parse("X r math;"));
+        }
+
+        [Fact]
         public void InvalidEscape_IsRejected()
         {
             Assert.Throws<TwlLoadException>(() => TwlParser.Parse("X s \"bad \\q escape\";"));

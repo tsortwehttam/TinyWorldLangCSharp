@@ -17,17 +17,22 @@ namespace TinyWorldLang.Model
         private readonly Dictionary<string, List<ComputedFact>> _rules;
         private readonly TypeGraph _types;
         private readonly Dictionary<string, string> _canonical; // raw name -> canonical name
+        private readonly string[] _entities;
 
         internal World(
             Dictionary<string, Dictionary<string, ValueSet>> stored,
             Dictionary<string, List<ComputedFact>> rules,
             TypeGraph types,
-            Dictionary<string, string> canonical)
+            Dictionary<string, string> canonical,
+            HashSet<string> entities)
         {
             _stored = stored;
             _rules = rules;
             _types = types;
             _canonical = canonical;
+            var orderedEntities = new List<string>(entities);
+            orderedEntities.Sort(StringComparer.Ordinal);
+            _entities = orderedEntities.ToArray();
         }
 
         public static World Load(string source) => WorldBuilder.Build(TwlParser.Parse(source));
@@ -52,6 +57,13 @@ namespace TinyWorldLang.Model
         public IReadOnlyList<ComputedFact> RulesFor(string relation) =>
             _rules.TryGetValue(relation, out var list) ? list : (IReadOnlyList<ComputedFact>)Array.Empty<ComputedFact>();
 
+        internal IEnumerable<ComputedFact> ComputedRules()
+        {
+            foreach (var list in _rules.Values)
+                foreach (var rule in list)
+                    yield return rule;
+        }
+
         public IReadOnlyList<string> Instances(string canonicalType)
         {
             var result = new List<string>();
@@ -65,8 +77,8 @@ namespace TinyWorldLang.Model
         public int Specificity(string canonicalEntity, string canonicalType) =>
             _types.DistanceFromEntity(canonicalEntity, canonicalType);
 
-        /// <summary>All entities that carry at least one stored fact or instanceof edge.</summary>
-        public IReadOnlyCollection<string> KnownEntities() => _stored.Keys;
+        /// <summary>All canonical entities mentioned in stored, structural, or rule type positions.</summary>
+        public IReadOnlyCollection<string> KnownEntities() => _entities;
 
         /// <summary>Relation names with stored facts on an entity.</summary>
         public IEnumerable<string> StoredRelationNames(string canonicalEntity) =>
@@ -75,13 +87,10 @@ namespace TinyWorldLang.Model
         /// <summary>Every relation name that some computed rule produces.</summary>
         public IEnumerable<string> ComputedRelationNames() => _rules.Keys;
 
-        /// <summary>The union of every entity mentioned as a subject or as an instanceof subject.</summary>
+        /// <summary>Every canonical entity mentioned in the loaded world.</summary>
         public IEnumerable<string> AllEntities()
         {
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var e in _stored.Keys) if (seen.Add(e)) yield return e;
-            // instanceof-only entities (no stored facts) still exist.
-            foreach (var e in _types.AllInstanceSubjects()) if (seen.Add(e)) yield return e;
+            foreach (var e in _entities) yield return e;
         }
     }
 }

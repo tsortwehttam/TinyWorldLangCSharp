@@ -25,6 +25,7 @@ namespace TinyWorldLang.Model
             var supertypes = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
             var grouped = new Dictionary<string, Dictionary<string, List<Value>>>(StringComparer.Ordinal);
             var rules = new Dictionary<string, List<ComputedFact>>(StringComparer.Ordinal);
+            var entities = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var stmt in parsed.Statements)
             {
@@ -32,17 +33,25 @@ namespace TinyWorldLang.Model
                 {
                     case StructuralFact st:
                         ApplyStructural(st, Canon, directTypes, supertypes);
+                        entities.Add(Canon(st.Left));
+                        entities.Add(Canon(st.Right));
                         break;
 
                     case StoredFact fact:
-                        AddStored(grouped, Canon(fact.Subject), fact.Relation, Canonicalize(fact.Value, Canon));
+                        string subject = Canon(fact.Subject);
+                        Value value = Canonicalize(fact.Value, Canon);
+                        AddStored(grouped, subject, fact.Relation, value);
+                        entities.Add(subject);
+                        if (value.Kind == ValueKind.Entity) entities.Add(value.AsEntity);
                         break;
 
                     case ComputedFact rule:
-                        var canonRule = new ComputedFact(Canon(rule.Type), rule.Relation, rule.Expression, rule.Line);
+                        string type = Canon(rule.Type);
+                        var canonRule = new ComputedFact(type, rule.Relation, rule.Expression, rule.Line);
                         if (!rules.TryGetValue(rule.Relation, out var list))
                             rules[rule.Relation] = list = new List<ComputedFact>();
                         list.Add(canonRule);
+                        entities.Add(type);
                         break;
                 }
             }
@@ -60,7 +69,7 @@ namespace TinyWorldLang.Model
                 stored[entityKv.Key] = rels;
             }
 
-            return new World(stored, rules, new TypeGraph(directTypes, supertypes), canonical);
+            return new World(stored, rules, new TypeGraph(directTypes, supertypes), canonical, entities);
         }
 
         private static void ApplyStructural(

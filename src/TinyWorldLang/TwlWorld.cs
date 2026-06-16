@@ -46,7 +46,16 @@ namespace TinyWorldLang
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             var world = World.Load(source);
-            return new TwlWorld(world, cel ?? TreeWalkingCelEvaluator.Instance, escaper);
+            var evaluator = cel ?? TreeWalkingCelEvaluator.Instance;
+            foreach (var rule in world.ComputedRules())
+            {
+                try { evaluator.Compile(rule.Expression); }
+                catch (CelException ex)
+                {
+                    throw new TwlLoadException($"in rule '{rule.Type} {rule.Relation}': {ex.Message}", rule.Line);
+                }
+            }
+            return new TwlWorld(world, evaluator, escaper);
         }
 
         /// <summary>Create a query view for one evaluation of this world.</summary>

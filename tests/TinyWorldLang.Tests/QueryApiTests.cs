@@ -118,5 +118,24 @@ namespace TinyWorldLang.Tests
             Assert.Contains("Marty", names);
             Assert.Contains("Biff", names);
         }
+
+        [Fact]
+        public void Entities_WithoutType_IncludesEntityValuedObjects()
+        {
+            var view = TwlWorld.Load("Marty friend Doc;").Evaluate();
+
+            var names = view.Entities().Select(e => e.Name).ToList();
+            Assert.Contains("Marty", names);
+            Assert.Contains("Doc", names);
+        }
+
+        [Fact]
+        public void TypedAccessors_ThrowTwlEvalException_OnEmptyOrWrongKind()
+        {
+            var view = TwlWorld.Load("Marty name \"Marty\";").Evaluate();
+
+            Assert.Throws<TwlEvalException>(() => view.Entity("Marty")["missing"].AsInt);
+            Assert.Throws<TwlEvalException>(() => view.Entity("Marty")["name"].AsInt);
+        }
     }
 }
