@@ -179,6 +179,9 @@ namespace TinyWorldLang.Parsing
         /// <summary>
         /// Scan a CEL expression up to the terminating <c>;</c>, skipping over any
         /// <c>;</c> that sits inside a CEL string literal (single or double quoted).
+        /// Comments (<c>//</c> to end of line, <c>/* ... */</c>) are trivia here too,
+        /// so they may appear anywhere inside a multi-line expression; a single <c>/</c>
+        /// is left intact as the division operator.
         /// </summary>
         private string ScanExpressionToSemicolon()
         {
@@ -194,6 +197,25 @@ namespace TinyWorldLang.Parsing
                     if (c == '\\' && !AtEnd) { sb.Append(Advance()); continue; }
                     if (c == quote) quote = '\0';
                     continue;
+                }
+                if (c == '/' && _pos + 1 < _src.Length)
+                {
+                    char n = _src[_pos + 1];
+                    if (n == '/')
+                    {
+                        while (!AtEnd && Cur != '\n') Advance();
+                        continue;
+                    }
+                    if (n == '*')
+                    {
+                        Advance(); Advance();
+                        while (!AtEnd && !(Cur == '*' && _pos + 1 < _src.Length && _src[_pos + 1] == '/'))
+                            Advance();
+                        if (AtEnd) throw new TwlLoadException("unterminated block comment", _line);
+                        Advance(); Advance();
+                        sb.Append(' '); // keep tokens from gluing across a /* */ comment
+                        continue;
+                    }
                 }
                 if (c == '"' || c == '\'') { quote = c; sb.Append(Advance()); continue; }
                 if (c == ';') { Advance(); break; }

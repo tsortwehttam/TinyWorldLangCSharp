@@ -7,6 +7,24 @@ namespace TinyWorldLang.Tests
     public class ParserTests
     {
         [Fact]
+        public void ComputedExpression_AllowsInlineComments_AndKeepsDivision()
+        {
+            // // and /* */ inside a multi-line expression are trivia; a lone / stays division.
+            var world = TinyWorldLang.TwlWorld.Load(@"
+                T extends Entity; X instanceof T;
+                X a 6; X b 4;
+                T total = one(self.a)        // the first part
+                        + one(self.b)        /* and the second */ ;
+                T half  = one(self.a) / 2;   // a single slash is still division
+                T glue  = one(self.a)/* c */+ one(self.b);
+            ");
+            var view = world.Evaluate();
+            Assert.Equal(10, view.Entity("X")["total"].AsInt);
+            Assert.Equal(3, view.Entity("X")["half"].AsInt);
+            Assert.Equal(10, view.Entity("X")["glue"].AsInt);
+        }
+
+        [Fact]
         public void ParsesStoredFacts_StructuralFacts_AndComputed()
         {
             var parsed = TwlParser.Parse(@"

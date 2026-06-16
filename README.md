@@ -87,6 +87,8 @@ SUBJECT RELATION VALUE; // a stored fact
 TYPE RELATION = EXPR; // a computed fact
 ```
 
+Comments are trivia and may appear anywhere whitespace can — including inside a computed expression, which often spans several lines. A `//` runs to end of line and `/* ... */` spans lines; a lone `/` is left intact as the division operator. (Comments inside a string value, on the other hand, are ordinary text — a `"..."` is verbatim content.)
+
 ### Values
 
 A `VALUE` is one of:
