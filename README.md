@@ -22,10 +22,8 @@ Marty bornYear 1968; Marty family McFlyFam;
 ```
 
 This repository is the **C# implementation** plus an in-process LINQ query API for C#
-consumers (Unity, MonoGame, console, desktop). The engine is a pure function —
-`eval(world, session, env) → values` — so the same inputs always produce the same values,
-and a host can stay stateless. Jump to [the language](#the-language) for the authoring
-reference, or [the C# engine](#c-engine--query-api) to embed it.
+consumers (Unity, MonoGame, console, desktop). Jump to [the language](#the-language) for the
+authoring reference, or [the C# engine](#c-engine--query-api) to embed it.
 
 ---
 
@@ -60,8 +58,7 @@ There are two kinds of fact:
   `Person age = now.getFullYear() - one(self.bornYear);`
 
 Every relation holds a **set** of values, and reading a relation that was never mentioned is
-simply the empty set — never an error. The engine evaluates lazily and is a pure function of
-three inputs:
+simply the empty set — never an error. Evaluation is a pure function of three inputs:
 
 | Input | What it is | Who owns it |
 |---|---|---|
@@ -69,9 +66,8 @@ three inputs:
 | **Session** | an append-only stream of events accumulated during play | the host; TWL only reads it |
 | **Env** | the per-evaluation environment: `now`, the `rand` seed, a turn counter | the host; ephemeral, per call |
 
-Because TWL holds no state, the host owns everything that changes: it appends events to the
-session and asks TWL what they imply. To resume a game you reload the world and session and
-evaluate — there is nothing else to restore.
+The host owns everything that changes: it appends events to the session and asks TWL what
+they imply. To resume a game, reload world and session and evaluate.
 
 ---
 
@@ -91,9 +87,6 @@ SUBJECT RELATION VALUE; // a stored fact
 TYPE RELATION = EXPR; // a computed fact
 ```
 
-- A stored fact records something directly: `Marty bornYear 1968;`
-- A computed fact gives a rule for a relation, applied to every entity of a type: `Person age = now.getFullYear() - one(self.bornYear);`
-
 ### Values
 
 A `VALUE` is one of:
@@ -103,11 +96,11 @@ A `VALUE` is one of:
 - boolean — `true`, `false`
 - string — `"..."` — a Mustache template (see [Templates](#templates)), rendered against the owning entity when read; may span multiple lines. Text with no `{{` tags renders to itself, so an ordinary value like `"Marty"` is just its literal text
 
-There is one string type and it is always a template. Stored strings are author content.
-Session text is never parsed as world source, but if a computed relation returns a session
-string and that relation is rendered, it follows the same template-rendering rules as any
-other string. Treat untrusted strings as untrusted output: use an escaper, avoid raw tags,
-or keep player-authored text outside template-rendered relations.
+Stored strings are author content. Session text is never parsed as world source, but if a
+computed relation returns a session string and that relation is rendered, it follows the same
+template-rendering rules as any other string. Treat untrusted strings as untrusted output:
+use an escaper, avoid raw tags, or keep player-authored text outside template-rendered
+relations.
 
 A value runs from its opening `"` to the next unescaped `"`, so a `;`, newline, or `{{` inside is ordinary text and does not end the value or the statement. Backslash escapes: `\"` (literal `"`), `\{` (literal `{`, which cannot begin a tag — write `\{\{` for a literal `{{`), `\\` (literal backslash), `\n`, `\t`. A backslash before anything else is an error, so an accidental `\` is caught rather than swallowed.
 
@@ -188,32 +181,25 @@ Person eldest = one(sortBy(self.children, "bornYear"));
 
 ### Evaluation model
 
-TWL is a pure function: given the world, the session event stream, and a small per-turn environment, it computes values — `eval(world, session, env) → values`. The same inputs always produce the same values. All change over the course of a game happens outside TWL, in the host: the host owns the facts and the event stream and asks TWL what they imply.
+The three inputs from the overview have strict boundaries:
 
-Inputs come in two kinds plus an environment:
+- World — the authored cartridge: types, `extends`, computed rules, and static facts. Immutable for the whole game.
+- Session — the host's append-only event stream. Events are *data*, not facts: they live in their own `session` namespace and are read through CEL, never mixed into the fact graph (see [Events](#events)).
+- Env — per-evaluation values such as `now`, the `rand` seed, and a turn counter. Not facts; reached through their own keywords and builtins. Ephemeral; gone after the call.
 
-- World — the authored cartridge: types, `extends`, computed rules, and static facts. Immutable for the whole game; this is what the author ships. All facts are author-authored.
-- Session — the event stream the host accumulates during play: an append-only, ordered list of events. Growing, but only the host writes it — TWL never does. Events are *data*, not facts: they live in their own `session` namespace and are read through CEL, never mixed into the fact graph (see [Events](#events)).
-- Env — the per-evaluation environment: `now`, the `rand` seed (you cannot read or set it from inside the world), a turn counter, and whatever else the host passes for this one query. Not facts; reached through their own keywords and builtins. Ephemeral; gone after the call.
-
-This split is deliberate. Facts are trusted author content; the session stream is where
-untrusted, host-supplied content (including raw player text) lives. Because the two never
-merge, player text is never parsed as world source. If you derive a string relation from the
-session and render it, though, it is still a string value and is rendered as a template; keep
-that path escaped or keep untrusted text outside rendered TWL strings. A "player action" is
-just the latest event the host appended; there is no separate action layer.
+This split keeps authored facts separate from host/player input. Session text is never parsed
+as world source; if you derive and render a string relation from it, keep that path escaped
+or outside TWL-rendered strings.
 
 `now` and `rand` are always available from the evaluation environment (defaulted if the host
 does not pass one). Session streams default to empty lists when the host supplies no session
 or no stream with that name.
 
-This reproducibility holds for a given engine build. Floating-point results are bit-for-bit
+Determinism holds for a given engine build. Floating-point results are bit-for-bit
 stable for ordinary arithmetic and the built-in helpers (`math.floor`, `math.ceil`,
 `math.round`, `math.trunc`, `math.abs`, `math.sign`, `math.sqrt`) on the tested runtimes, but
 a host-supplied CEL backend or extra functions may differ in their last bits across platforms
 or library versions — don't rely on cross-machine bit-identical output from those.
-
-Because TWL holds no state, a server can be stateless: cache the world (it never changes), persist the session event stream between requests, and supply the environment per request. To resume a game, reload world and session and evaluate. There is nothing else to restore.
 
 ### Events
 
@@ -259,12 +245,9 @@ Every string value (`"..."`) is a Mustache template, rendered against the entity
 
 A single boolean fact is still a one-value set, so `{{# flag}}` renders for both `true` and `false`. To branch on a condition, make a computed relation that is empty when the condition is false.
 
-Names in a template resolve to the owning entity's relations. To render event-derived text,
-first compute a relation from the stream (`Person lastLine = session.events.filter(e, e.actor
-== self).map(e, e.text);`) and render that. Two cautions when that text is untrusted: every
-string value is rendered as a template, so `{{...}}` inside event text can resolve against the
-owning entity; and `{{{rel}}}` / `{{& rel}}` bypasses the host escaper entirely. Prefer
-escaped `{{rel}}`, or keep raw player text outside TWL-rendered strings.
+Names in a template resolve to the owning entity's relations. If event-derived text is
+rendered, remember that every string value is a template and raw tags bypass the host
+escaper. Prefer escaped `{{rel}}`, or keep raw player text outside TWL-rendered strings.
 
 ### Example
 
@@ -296,13 +279,11 @@ Biff persona "A bully with disdain for:
 
 ## C# engine & query API
 
-The engine (`src/TinyWorldLang`) is a pure function — `eval(world, session, env) → values` —
-so the same inputs always produce the same values and a host can stay stateless. It targets
-**`netstandard2.0`** with **zero third-party runtime dependencies**, so it drops into Unity
-(Mono **and** IL2CPP/AOT), MonoGame, consoles, WebGL, and desktop unchanged. No NuGet package
-is published yet — reference the project directly, or drop the `src/TinyWorldLang/*.cs`
-sources into your game project / Unity `Assets`. (Building the tests needs the .NET 8 SDK; the
-engine itself does not.)
+The engine (`src/TinyWorldLang`) targets **`netstandard2.0`** with **zero third-party runtime
+dependencies**, so it drops into Unity (Mono **and** IL2CPP/AOT), MonoGame, consoles, WebGL,
+and desktop unchanged. No NuGet package is published yet — reference the project directly,
+or drop the `src/TinyWorldLang/*.cs` sources into your game project / Unity `Assets`.
+(Building the tests needs the .NET 8 SDK; the engine itself does not.)
 
 ```csharp
 using TinyWorldLang;        // TwlWorld, exceptions
@@ -365,6 +346,10 @@ consoles**. That rules out the usual shortcuts and drives every structural decis
 | Broadest runtime surface | Core targets **`netstandard2.0`** (covers Unity all-backends, MonoGame, current console toolchains). |
 | Determinism / reproducibility (per the spec) | `rand` uses a **stable FNV-1a hash** over a canonical key encoding — never `string.GetHashCode()`, which .NET salts per process. |
 | Keep it portable | Core has **zero third-party runtime dependencies** and does **no JSON** — hosts own (de)serialization with whatever they already have. |
+
+**Portability guardrail.** `PortabilityTests` fail if the core target drifts from
+`netstandard2.0`, gains runtime package dependencies, or starts using known AOT-hostile APIs
+such as `Reflection.Emit`, `Expression.Compile`, `DynamicMethod`, `dynamic`, or threads/timers.
 
 **Why a query API, not GraphQL.** TWL's data model is literally a triple store
 (`SUBJECT RELATION VALUE` is an RDF triple). GraphQL assumes a static, typed, tree-shaped

@@ -7,8 +7,8 @@ using TinyWorldLang.Values;
 namespace TinyWorldLang.Cel
 {
     /// <summary>
-    /// The default CEL backend: a pure tree-walking interpreter. No Reflection.Emit,
-    /// no Expression.Compile — safe under IL2CPP/AOT and on consoles/WebGL.
+    /// The default CEL backend: a pure tree-walking interpreter with no runtime codegen,
+    /// safe under IL2CPP/AOT and on consoles/WebGL.
     /// </summary>
     /// <remarks>
     /// Covers the subset the spec documents: <c>map/filter/exists/all</c>, <c>in</c>,
