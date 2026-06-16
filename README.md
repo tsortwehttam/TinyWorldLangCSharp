@@ -593,4 +593,6 @@ Known growth points (intentionally not done yet):
 
 ## License
 
-> _TODO: choose and add a `LICENSE` file before publishing._
+Licensed under the Apache License, Version 2.0 — see [`LICENSE`](LICENSE).
+
+Copyright 2026 the Tiny World Language authors.
