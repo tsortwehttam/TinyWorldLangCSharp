@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- netstandard2.0: the broadest surface that covers Unity (all backends),
+         MonoGame, and current console toolchains. Do not raise this without a
+         reason that survives the platform matrix in README.md. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>TinyWorldLang</AssemblyName>
+    <RootNamespace>TinyWorldLang</RootNamespace>
+    <!-- Zero third-party PackageReferences by design. The core does no JSON and
+         no dynamic codegen; hosts own serialization and (optionally) inject an
+         alternative ICelEvaluator. -->
+  </PropertyGroup>
+
+</Project>

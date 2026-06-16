@@ -1,0 +1,16 @@
+<Project>
+  <!--
+    Shared build settings for the whole solution.
+    The CORE library (src/TinyWorldLang) targets netstandard2.0 so it drops into
+    Unity (Mono + IL2CPP/AOT), MonoGame, and console builds unchanged. Keep it
+    free of dynamic codegen (no Reflection.Emit / Expression.Compile) and free of
+    third-party runtime dependencies.
+  -->
+  <PropertyGroup>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <Deterministic>true</Deterministic>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+</Project>
