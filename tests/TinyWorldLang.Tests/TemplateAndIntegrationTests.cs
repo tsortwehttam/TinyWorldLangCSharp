@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using TinyWorldLang;
 using TinyWorldLang.Eval;
 using Xunit;
@@ -11,7 +12,7 @@ namespace TinyWorldLang.Tests
         public void PlainStringValue_RendersToItself()
         {
             var view = TwlWorld.Load("Marty firstName \"Marty\";").Evaluate();
-            Assert.Equal("Marty", view.Render("Marty", "firstName"));
+            Assert.Equal("Marty", view.Entity("Marty")["firstName"].Text);
         }
 
         [Fact]
@@ -21,14 +22,14 @@ namespace TinyWorldLang.Tests
                 Marty firstName ""Marty"";
                 Marty greeting ""Hi, I'm {{firstName}}"";
             ").Evaluate();
-            Assert.Equal("Hi, I'm Marty", view.Render("Marty", "greeting"));
+            Assert.Equal("Hi, I'm Marty", view.Entity("Marty")["greeting"].Text);
         }
 
         [Fact]
         public void EscapedBraces_AreLiteral_NotTags()
         {
             var view = TwlWorld.Load("X t \"literal \\{\\{notATag}}\";").Evaluate();
-            Assert.Equal("literal {{notATag}}", view.Render("X", "t"));
+            Assert.Equal("literal {{notATag}}", view.Entity("X")["t"].Text);
         }
 
         [Fact]
@@ -40,8 +41,8 @@ namespace TinyWorldLang.Tests
                 X unescaped ""{{{raw}}}"";
             ", escaper: s => s.Replace("<", "&lt;").Replace(">", "&gt;"));
             var view = world.Evaluate();
-            Assert.Equal("&lt;b&gt;", view.Render("X", "escaped"));
-            Assert.Equal("<b>", view.Render("X", "unescaped"));
+            Assert.Equal("&lt;b&gt;", view.Entity("X")["escaped"].Text);
+            Assert.Equal("<b>", view.Entity("X")["unescaped"].Text);
         }
 
         [Fact]
@@ -60,7 +61,7 @@ namespace TinyWorldLang.Tests
                 Person enemies = instances(Person).filter(p, self.dislikes.exists(fam, fam in p.family) && self != p);
                 Biff persona ""A bully with disdain for:{{# enemies}} {{firstName}} {{lastName}};{{/}}"";
             ");
-            var rendered = world.Evaluate().Render("Biff", "persona");
+            var rendered = world.Evaluate().Entity("Biff")["persona"].Text;
             // Enemies are Marty and Lorraine (both McFly), in canonical (name) order.
             Assert.Contains("Lorraine McFly", rendered);
             Assert.Contains("Marty McFly", rendered);
@@ -72,14 +73,14 @@ namespace TinyWorldLang.Tests
             var world = TwlWorld.Load(SpecExample);
             var view = world.Evaluate(env: new Env(new DateTimeOffset(1985, 10, 26, 0, 0, 0, TimeSpan.Zero)));
 
-            Assert.Equal(1985 - 1968, view.GetOne("Marty", "age").AsInt);
-            Assert.Equal("McFly", view.Render("Marty", "lastName"));
+            Assert.Equal(1985 - 1968, view.Entity("Marty")["age"].AsInt);
+            Assert.Equal("McFly", view.Entity("Marty")["lastName"].Text);
 
-            // Query the relation across the whole type.
-            var ages = view.Query("Person", "age");
-            Assert.Equal(1985 - 1949, ages["Lorraine"].One().AsInt);
+            // Query the relation across the whole type via LINQ.
+            var ages = view.Entities("Person").ToDictionary(p => p.Name, p => p["age"].AsInt);
+            Assert.Equal(1985 - 1949, ages["Lorraine"]);
 
-            var persona = view.Render("Biff", "persona");
+            var persona = view.Entity("Biff")["persona"].Text;
             Assert.Contains("Marty McFly", persona);
             Assert.Contains("Lorraine McFly", persona);
         }

@@ -8,10 +8,44 @@ type's relation state by name, passing in a session and a per-evaluation environ
 ```csharp
 var world = TwlWorld.Load(source);            // parse + validate once, cache it
 var view  = world.Evaluate(session, env);     // eval(world, session, env) -> values
-var age   = view.GetOne("Marty", "age");      // query by name + relation
-var bios  = view.Query("Person", "persona");  // a relation across a whole type
-var text  = view.Render("Biff", "persona");   // render a string value's template
+
+// One general way to query: entity handles + standard LINQ-to-objects.
+// "such-and-such fields from every entity matching a condition"
+var threats = view.Entities("Person")
+    .Where(p => p["age"].AsInt > 40)
+    .Select(p => new {
+        p.Name,
+        Bio    = p["persona"].Text,    // string fields are already rendered
+        Family = p["family"].Entities, // multi-valued: the whole set as handles
+    });
+
+// a generic record: every relation on one entity
+var biff = view.Entity("Biff");
+foreach (var rel in biff.Relations)
+    Console.WriteLine($"{rel} = {biff[rel].Text}");
 ```
+
+### The query surface (and why not GraphQL)
+
+TWL's data model is literally a **triple store**: `SUBJECT RELATION VALUE` is an RDF
+subject-predicate-object triple. That is why GraphQL is the wrong fit — GraphQL assumes a
+static, typed, tree-shaped schema, while TWL is an *open, dynamic triple graph*. The
+prior art that fits triples is the RDF/graph family (SPARQL, Cypher, Datalog), not GraphQL.
+
+For Layer 1 (in-process, C#), the prior art that needs **zero new documentation** is
+**LINQ**: there is one entry point — `Entities()` / `Entity(name)` returning handles — and
+everything else is `Where` / `Select` / `OrderBy` that C# developers already know. It is
+LINQ-**to-objects** (`IEnumerable`), never `IQueryable` with expression trees, so there is
+no `Expression.Compile` and it stays AOT-safe on consoles/WebGL.
+
+- `Entity` — a handle: `Name`, `Is(type)`, `Relations`, and an indexer `e[relation]`.
+- `Field` — one relation's current state: a `ValueSet` with ergonomic accessors
+  (`One()`, `AsInt`, `Entities`, `IsEmpty`, …). **String values present already rendered**
+  (`.Text` / `.ToString()`); the raw template source is available only via `.Source`.
+
+A portable *string* query language is deliberately deferred. If one is ever wanted, a
+**SPARQL-subset** is the natural choice (the data is RDF triples) and would lower onto this
+same primitive — it would never be part of the core.
 
 ## Why this shape (the platform matrix)
 
@@ -49,7 +83,7 @@ src/TinyWorldLang/            netstandard2.0, zero deps — the engine
   Parsing/                    TWL statement lexer/parser + AST
   Model/                      World, type/identity graph (instanceof/extends/sameas), tiebreak inputs
   Cel/                        ICelEvaluator seam + AST + tree-walking interpreter
-  Eval/                       Env, Session/Event, WorldView (query surface + tiebreak + CEL context)
+  Eval/                       Env, Session/Event, WorldView, Entity/Field query handles, tiebreak, CEL context
   Templates/                  Mustache-subset renderer
   Rand/                       stable hash + unit-interval mapping
   TwlWorld.cs                 public entry point
@@ -62,8 +96,9 @@ tests/TinyWorldLang.Conformance/  SKELETON harness pinning the CEL subset to cel
 
 Working and tested: the TWL parser; the type/identity graph (`instanceof` transitivity,
 `extends` cycle detection, `sameas` merge with canonical naming); stored-vs-computed and
-specificity **tiebreak**; the **query API** (`Get` / `GetOne` / `Query` / `Render`);
-canonical set ordering; reproducible `rand`; the template renderer; and a CEL interpreter
+specificity **tiebreak**; the **LINQ query surface** (`Entities` / `Entity` → `Field`, with
+string values auto-rendering); canonical set ordering; reproducible `rand`; the template
+renderer; and a CEL interpreter
 covering the spec's examples (`map`/`filter`/`exists`/`all`, `in`, `?:`, member/index,
 `math.*`, `one`/`sortBy`/`instances`/`rand`/`size`/`int`/`double`/`string`/`bool`, `now`
 date methods, and `session.*` event reads).

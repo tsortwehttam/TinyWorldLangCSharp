@@ -42,39 +42,63 @@ namespace TinyWorldLang.Eval
         }
 
         // -------- Public query API --------
+        //
+        // One general way to query: get entity handles, then filter/project with
+        // standard LINQ-to-objects (no IQueryable / expression trees, so it stays
+        // AOT-safe). A relation is read as a Field; string values present rendered.
+        //
+        //   view.Entities("Person")
+        //       .Where(p => p["age"].AsInt > 40)
+        //       .Select(p => new { p.Name, Bio = p["persona"].Text });
 
-        /// <summary>Current value set of <paramref name="relation"/> on the entity named <paramref name="entity"/>.</summary>
-        public ValueSet Get(string entity, string relation) =>
-            Resolve(_world.Canonical(entity), relation);
+        /// <summary>A handle to the entity named <paramref name="name"/> (resolved to canonical).</summary>
+        public Entity Entity(string name) => new Entity(this, _world.Canonical(name));
 
-        /// <summary>Convenience: the single value (canonical-first) of a relation, or <c>null</c> when empty.</summary>
-        public Value GetOne(string entity, string relation) => Get(entity, relation).One();
-
-        /// <summary>
-        /// The relation evaluated for every instance of <paramref name="type"/>,
-        /// keyed by canonical entity name.
-        /// </summary>
-        public IReadOnlyDictionary<string, ValueSet> Query(string type, string relation)
+        /// <summary>Every entity in the world (mentioned as a subject or an <c>instanceof</c> subject).</summary>
+        public IEnumerable<Entity> Entities()
         {
-            var result = new Dictionary<string, ValueSet>(StringComparer.Ordinal);
-            foreach (var e in _world.Instances(_world.Canonical(type)))
-                result[e] = Resolve(e, relation);
-            return result;
+            foreach (var e in _world.AllEntities()) yield return new Entity(this, e);
         }
 
-        /// <summary>Render the canonical-first value of a relation as a template against its owner.</summary>
-        public string Render(string entity, string relation)
+        /// <summary>Every entity that is an instance of <paramref name="type"/>, directly or via a subtype.</summary>
+        public IEnumerable<Entity> Entities(string type)
         {
-            string owner = _world.Canonical(entity);
-            var set = Resolve(owner, relation);
-            if (set.IsEmpty) return "";
-            var v = set.One();
-            if (v.Kind != ValueKind.String) return v.ToString();
-            return Renderer().Render(v.AsString, owner);
+            foreach (var e in _world.Instances(_world.Canonical(type))) yield return new Entity(this, e);
         }
 
         public bool IsInstanceOf(string entity, string type) =>
             _world.IsInstanceOf(_world.Canonical(entity), _world.Canonical(type));
+
+        // -------- Internal surface used by Entity / Field --------
+
+        internal Entity EntityHandle(string canonicalName) => new Entity(this, canonicalName);
+
+        internal ValueSet ResolveSet(string canonicalEntity, string relation) => Resolve(canonicalEntity, relation);
+
+        /// <summary>Render a single value to presentation text; a string value is rendered as a template.</summary>
+        internal string RenderValueText(Value v, string owner)
+        {
+            if (v.IsNull) return "";
+            if (v.Kind == ValueKind.String) return Renderer().Render(v.AsString, owner);
+            return v.ToString();
+        }
+
+        /// <summary>Declared relation names for an entity (stored + applicable computed), canonical order. No evaluation.</summary>
+        internal IReadOnlyList<string> RelationNamesFor(string canonicalEntity)
+        {
+            var names = new SortedSet<string>(StringComparer.Ordinal);
+            foreach (var r in _world.StoredRelationNames(canonicalEntity)) names.Add(r);
+            foreach (var r in _world.ComputedRelationNames())
+                if (HasApplicableRule(canonicalEntity, r)) names.Add(r);
+            return new List<string>(names);
+        }
+
+        private bool HasApplicableRule(string entity, string relation)
+        {
+            foreach (var rule in _world.RulesFor(relation))
+                if (_world.Specificity(entity, rule.Type) >= 0) return true;
+            return false;
+        }
 
         // -------- Relation resolution + tiebreak --------
 

@@ -67,5 +67,21 @@ namespace TinyWorldLang.Model
 
         /// <summary>All entities that carry at least one stored fact or instanceof edge.</summary>
         public IReadOnlyCollection<string> KnownEntities() => _stored.Keys;
+
+        /// <summary>Relation names with stored facts on an entity.</summary>
+        public IEnumerable<string> StoredRelationNames(string canonicalEntity) =>
+            _stored.TryGetValue(canonicalEntity, out var rels) ? rels.Keys : System.Linq.Enumerable.Empty<string>();
+
+        /// <summary>Every relation name that some computed rule produces.</summary>
+        public IEnumerable<string> ComputedRelationNames() => _rules.Keys;
+
+        /// <summary>The union of every entity mentioned as a subject or as an instanceof subject.</summary>
+        public IEnumerable<string> AllEntities()
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var e in _stored.Keys) if (seen.Add(e)) yield return e;
+            // instanceof-only entities (no stored facts) still exist.
+            foreach (var e in _types.AllInstanceSubjects()) if (seen.Add(e)) yield return e;
+        }
     }
 }

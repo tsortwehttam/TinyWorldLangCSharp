@@ -11,10 +11,13 @@ namespace TinyWorldLang
     /// </summary>
     /// <example>
     /// <code>
-    /// var world = TwlWorld.Load(source);                 // parse + validate once, cache it
-    /// var view  = world.Evaluate(session, env);          // (world, session, env) -> values
-    /// var age   = view.GetOne("Marty", "age");           // query by name + relation
-    /// var bios  = view.Query("Person", "persona");       // a relation across a type
+    /// var world = TwlWorld.Load(source);            // parse + validate once, cache it
+    /// var view  = world.Evaluate(session, env);     // (world, session, env) -> values
+    ///
+    /// // One general way to query: entity handles + standard LINQ.
+    /// var threats = view.Entities("Person")
+    ///     .Where(p => p["age"].AsInt > 40)
+    ///     .Select(p => new { p.Name, Bio = p["persona"].Text });
     /// </code>
     /// </example>
     public sealed class TwlWorld

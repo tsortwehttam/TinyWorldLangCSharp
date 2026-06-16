@@ -51,8 +51,8 @@ namespace TinyWorldLang.Tests
                 Die extends Entity; D instanceof Die;
                 Die roll = int(rand([self, ""roll""]) * 6.0) + 1;
             ");
-            var r1 = world.Evaluate(env: new Env(System.DateTimeOffset.UnixEpoch, seed: 123)).GetOne("D", "roll").AsInt;
-            var r2 = world.Evaluate(env: new Env(System.DateTimeOffset.UnixEpoch, seed: 123)).GetOne("D", "roll").AsInt;
+            var r1 = world.Evaluate(env: new Env(System.DateTimeOffset.UnixEpoch, seed: 123)).Entity("D")["roll"].AsInt;
+            var r2 = world.Evaluate(env: new Env(System.DateTimeOffset.UnixEpoch, seed: 123)).Entity("D")["roll"].AsInt;
             Assert.Equal(r1, r2);
             Assert.InRange(r1, 1, 6);
         }

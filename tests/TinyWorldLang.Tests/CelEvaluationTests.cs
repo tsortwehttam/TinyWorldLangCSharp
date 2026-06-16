@@ -17,7 +17,7 @@ namespace TinyWorldLang.Tests
                 Marty instanceof Person; Marty bornYear 1968;
                 Person age = now.getFullYear() - one(self.bornYear);
             ");
-            Assert.Equal(2025 - 1968, world.Evaluate(env: At(2025)).GetOne("Marty", "age").AsInt);
+            Assert.Equal(2025 - 1968, world.Evaluate(env: At(2025)).Entity("Marty")["age"].AsInt);
         }
 
         [Fact]
@@ -28,7 +28,7 @@ namespace TinyWorldLang.Tests
                 Marty instanceof Person; // no bornYear
                 Person age = now.getFullYear() - one(self.bornYear);
             ");
-            Assert.ThrowsAny<TwlException>(() => world.Evaluate(env: At(2025)).Get("Marty", "age"));
+            Assert.ThrowsAny<TwlException>(() => world.Evaluate(env: At(2025)).Entity("Marty")["age"].One());
         }
 
         [Fact]
@@ -38,7 +38,7 @@ namespace TinyWorldLang.Tests
                 T extends Entity; X instanceof T;
                 T bad = 1 + 1.0;
             ");
-            Assert.ThrowsAny<TwlException>(() => world.Evaluate().Get("X", "bad"));
+            Assert.ThrowsAny<TwlException>(() => world.Evaluate().Entity("X")["bad"].One());
         }
 
         [Fact]
@@ -54,9 +54,9 @@ namespace TinyWorldLang.Tests
                 Person enemies = instances(Person).filter(p, self.dislikes.exists(fam, fam in p.family) && self != p);
             ");
             var view = world.Evaluate();
-            var biffEnemies = view.Get("Biff", "enemies");
+            var biffEnemies = view.Entity("Biff")["enemies"];
             Assert.Equal(2, biffEnemies.Count); // Marty and Lorraine
-            Assert.True(view.Get("Marty", "enemies").IsEmpty);
+            Assert.True(view.Entity("Marty")["enemies"].IsEmpty);
         }
 
         [Fact]
@@ -76,8 +76,8 @@ namespace TinyWorldLang.Tests
                 Fam first = one(sortBy(self.members, ""bornYear""));
             ");
             var view = world.Evaluate();
-            Assert.True(view.GetOne("F", "ordered").AsBool); // [C(null), B(1970), A(1990)]
-            Assert.Equal("C", view.GetOne("F", "first").AsEntity);
+            Assert.True(view.Entity("F")["ordered"].AsBool); // [C(null), B(1970), A(1990)]
+            Assert.Equal("C", view.Entity("F")["first"].AsEntity);
         }
 
         [Fact]
@@ -89,8 +89,8 @@ namespace TinyWorldLang.Tests
                 T half = int(double(one(self.hp)) / 2.0);
             ");
             var view = world.Evaluate();
-            Assert.Equal(100, view.GetOne("X", "clamped").AsInt);
-            Assert.Equal(125, view.GetOne("X", "half").AsInt);
+            Assert.Equal(100, view.Entity("X")["clamped"].AsInt);
+            Assert.Equal(125, view.Entity("X")["half"].AsInt);
         }
 
         [Fact]
@@ -108,7 +108,7 @@ namespace TinyWorldLang.Tests
                 Ev(("actor", "George"), ("target", "Biff"), ("verb", "insult")),
             };
             var view = world.Evaluate(Session.OfEvents(events));
-            Assert.Equal(2, view.GetOne("Biff", "insultCount").AsInt);
+            Assert.Equal(2, view.Entity("Biff")["insultCount"].AsInt);
         }
 
         private static Event Ev(params (string, string)[] fields)

@@ -33,6 +33,9 @@ namespace TinyWorldLang.Model
 
         public bool IsInstanceOf(string entity, string type) => DistanceFromEntity(entity, type) >= 0;
 
+        /// <summary>Every entity that has at least one direct <c>instanceof</c> edge.</summary>
+        public IEnumerable<string> AllInstanceSubjects() => _directTypes.Keys;
+
         /// <summary>
         /// Shortest "is-a" distance from <paramref name="entity"/> to <paramref name="type"/>,
         /// or -1 if the entity is not an instance of the type. A direct

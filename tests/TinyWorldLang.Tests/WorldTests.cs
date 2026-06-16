@@ -15,7 +15,7 @@ namespace TinyWorldLang.Tests
                 Widget color ""stored"";
             ");
             var view = world.Evaluate();
-            Assert.Equal("stored", view.Render("Widget", "color"));
+            Assert.Equal("stored", view.Entity("Widget")["color"].Text);
         }
 
         [Fact]
@@ -28,7 +28,7 @@ namespace TinyWorldLang.Tests
                 Animal sound = ""generic"";
                 Dog sound = ""woof"";
             ");
-            Assert.Equal("woof", world.Evaluate().Render("Rex", "sound"));
+            Assert.Equal("woof", world.Evaluate().Entity("Rex")["sound"].Text);
         }
 
         [Fact]
@@ -42,7 +42,7 @@ namespace TinyWorldLang.Tests
                 A v = 1;
                 B v = 2;
             ");
-            Assert.Throws<TwlLoadException>(() => world.Evaluate().Get("X", "v"));
+            Assert.Throws<TwlLoadException>(() => world.Evaluate().Entity("X")["v"].One());
         }
 
         [Fact]
@@ -61,8 +61,9 @@ namespace TinyWorldLang.Tests
             ");
             var view = world.Evaluate();
             // Canonical name is the ordinal-least ("Bob"); both names resolve to it.
-            Assert.Equal(30, view.GetOne("Robert", "age").AsInt);
-            Assert.Equal(30, view.GetOne("Bob", "age").AsInt);
+            Assert.Equal(30, view.Entity("Robert")["age"].AsInt);
+            Assert.Equal(30, view.Entity("Bob")["age"].AsInt);
+            Assert.Equal("Bob", view.Entity("Robert").Name);
         }
 
         [Fact]
@@ -74,15 +75,15 @@ namespace TinyWorldLang.Tests
                 Gandalf instanceof Wizard;
             ");
             var view = world.Evaluate();
-            Assert.True(view.IsInstanceOf("Gandalf", "Person"));
-            Assert.True(view.IsInstanceOf("Gandalf", "Entity"));
+            Assert.True(view.Entity("Gandalf").Is("Person"));
+            Assert.True(view.Entity("Gandalf").Is("Entity"));
         }
 
         [Fact]
         public void UnknownRelation_IsEmpty_NotError()
         {
             var view = TwlWorld.Load("Marty instanceof Person;").Evaluate();
-            Assert.True(view.Get("Marty", "nothingHere").IsEmpty);
+            Assert.True(view.Entity("Marty")["nothingHere"].IsEmpty);
         }
     }
 }
