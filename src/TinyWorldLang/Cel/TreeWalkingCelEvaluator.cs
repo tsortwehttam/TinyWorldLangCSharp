@@ -11,9 +11,10 @@ namespace TinyWorldLang.Cel
     /// safe under IL2CPP/AOT and on consoles/WebGL.
     /// </summary>
     /// <remarks>
-    /// Covers the subset the spec documents: <c>map/filter/exists/all</c>, <c>in</c>,
+    /// Covers the subset the spec documents: <c>map/filter/exists/all/reduce</c>, <c>in</c>,
     /// <c>?:</c>, member/index access, the <c>math.*</c> helpers, <c>one/sortBy/
-    /// instances/rand/size/int/double/string/bool</c>, and <c>now</c> date methods.
+    /// instances/rand/size/sum/min/max/argmin/argmax/int/double/string/bool</c>, and
+    /// <c>now</c> date methods.
     /// Correctness is meant to be pinned to the official cel-spec conformance corpus
     /// (see tests/TinyWorldLang.Conformance).
     /// </remarks>
@@ -266,6 +267,8 @@ namespace TinyWorldLang.Cel
             {
                 case "map": case "filter": case "exists": case "all":
                     return EvalMacro(c, scope, ctx);
+                case "reduce":
+                    return EvalReduce(c, scope, ctx);
             }
 
             throw new CelException($"unknown method '.{c.Name}(...)'");
@@ -313,6 +316,11 @@ namespace TinyWorldLang.Cel
                 }
                 case "sortBy": RequireArgCount(c, 2); return EvalSortBy(c, scope, ctx);
                 case "rand": RequireArgCount(c, 1); return Value.Double(ctx.Rand(Eval(c.Args[0], scope, ctx)));
+                case "sum": RequireArgCount(c, 1); return Sum(AsList(Eval(c.Args[0], scope, ctx), "sum"));
+                case "max": RequireArgCount(c, 1); return Extreme(AsList(Eval(c.Args[0], scope, ctx), "max"), wantMax: true, "max");
+                case "min": RequireArgCount(c, 1); return Extreme(AsList(Eval(c.Args[0], scope, ctx), "min"), wantMax: false, "min");
+                case "argmax": return EvalArgExtreme(c, scope, ctx, wantMax: true);
+                case "argmin": return EvalArgExtreme(c, scope, ctx, wantMax: false);
                 default:
                     throw new CelException($"unknown function '{c.Name}(...)'");
             }
@@ -381,6 +389,93 @@ namespace TinyWorldLang.Cel
                     return Value.Bool(true);
                 }
             }
+        }
+
+        // list.reduce(acc, x, initial, body) — a left fold. `acc` is the accumulator,
+        // `x` the current element; the body computes the next accumulator. An empty
+        // list returns the initial value unchanged. The accumulator may be a list, so
+        // a fold can carry several running values at once (e.g. a count plus a total).
+        private static Value EvalReduce(CelCall c, Scope scope, ICelContext ctx)
+        {
+            if (c.Args.Count != 4 || !(c.Args[0] is CelIdent accIdent) || !(c.Args[1] is CelIdent elemIdent))
+                throw new CelException("reduce() takes (accumulator, element, initial, body), e.g. list.reduce(acc, x, 0, acc + x)");
+
+            var source = AsList(Eval(c.Target!, scope, ctx), "reduce");
+            string accName = accIdent.Name, elemName = elemIdent.Name;
+            var body = c.Args[3];
+
+            var acc = Eval(c.Args[2], scope, ctx); // initial
+            foreach (var item in source)
+                acc = Eval(body, scope.Bind(accName, acc).Bind(elemName, item), ctx);
+            return acc;
+        }
+
+        // argmax/argmin(list, x, key) — the element of `list` whose `key` is greatest
+        // (or least). Binds `x` to each element to evaluate the key. Empty list -> null;
+        // ties keep the first element in list order. Keys are ranked in canonical order,
+        // so this generalizes beyond numbers (e.g. "most recent event" by an integer seq).
+        private static Value EvalArgExtreme(CelCall c, Scope scope, ICelContext ctx, bool wantMax)
+        {
+            string name = wantMax ? "argmax" : "argmin";
+            if (c.Args.Count != 3 || !(c.Args[1] is CelIdent varIdent))
+                throw new CelException($"{name}(list, x, key) takes a list, a variable, and a key expression");
+
+            var list = AsList(Eval(c.Args[0], scope, ctx), name);
+            if (list.Count == 0) return Value.Null;
+
+            string var = varIdent.Name;
+            var keyExpr = c.Args[2];
+            Value best = list[0];
+            Value bestKey = Eval(keyExpr, scope.Bind(var, best), ctx);
+            for (int i = 1; i < list.Count; i++)
+            {
+                var key = Eval(keyExpr, scope.Bind(var, list[i]), ctx);
+                int cmp = CanonicalComparer.Instance.Compare(key, bestKey);
+                if (wantMax ? cmp > 0 : cmp < 0) { best = list[i]; bestKey = key; }
+            }
+            return best;
+        }
+
+        // sum(list) — numeric total. Empty -> int 0. Honors the no-mixing rule: a list
+        // mixing integers and doubles is an error (convert with int(...)/double(...)).
+        private static Value Sum(IReadOnlyList<Value> list)
+        {
+            if (list.Count == 0) return Value.Int(0);
+            foreach (var v in list)
+                if (!v.IsNumber) throw new CelException("sum() requires a list of numbers");
+
+            bool isDouble = list[0].Kind == ValueKind.Double;
+            foreach (var v in list)
+                if ((v.Kind == ValueKind.Double) != isDouble)
+                    throw new CelException("sum() cannot mix integer and double — convert with int(...) or double(...)");
+
+            if (isDouble)
+            {
+                double total = 0;
+                foreach (var v in list) total += v.AsDouble;
+                return Value.Double(total);
+            }
+            long acc = 0;
+            foreach (var v in list) acc += v.AsInt;
+            return Value.Int(acc);
+        }
+
+        // max(list)/min(list) — numeric extreme, preserving the winner's kind. Integers
+        // and doubles compare by mathematical value (the spec's comparison rule), so a
+        // mixed list is allowed here. Empty -> null (like one() on an empty set).
+        private static Value Extreme(IReadOnlyList<Value> list, bool wantMax, string who)
+        {
+            if (list.Count == 0) return Value.Null;
+            foreach (var v in list)
+                if (!v.IsNumber) throw new CelException($"{who}() requires a list of numbers");
+
+            Value best = list[0];
+            for (int i = 1; i < list.Count; i++)
+            {
+                int cmp = Value.CompareNumeric(list[i], best);
+                if (wantMax ? cmp > 0 : cmp < 0) best = list[i];
+            }
+            return best;
         }
 
         private static Value EvalMath(CelCall c, Scope scope, ICelContext ctx)

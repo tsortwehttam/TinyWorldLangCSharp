@@ -158,6 +158,8 @@ After `=` you write an expression in CEL (Common Expression Language). The rule 
 
 Common expression forms: `list.map(x, expr)`, `list.filter(x, cond)`, `x in list`, `list.exists(x, cond)`, `list.all(x, cond)`, `size(list)`, `cond ? a : b`.
 
+Aggregations over a set: `sum(list)`, `min(list)`, `max(list)` — numeric, with `min`/`max` of an empty set giving `null` and `sum` giving `0`; a list mixing integers and doubles is an error (`sum`), same as ordinary arithmetic. The keyed picks `argmax(list, x, key)` and `argmin(list, x, key)` bind `x` to each element to evaluate `key`, then return the *element* whose key is greatest/least (canonical order, so they work for numbers, strings, or entities) — this is the "most recent event by seq" pattern, `argmax(session.events, e, e.seq)`. For a general left fold, `list.reduce(acc, x, initial, body)`: `acc` starts at `initial`, the body computes the next accumulator for each element `x`, and an empty list returns `initial` unchanged. The accumulator may itself be a list, so a fold can carry several running values at once — a count alongside a total, or a value that resets on a boundary, which a plain weighted count cannot express.
+
 Math helpers are available under `math.`: `math.greatest(a, b)` (max), `math.least(a, b)` (min), `math.abs`, `math.sign`, `math.floor`, `math.ceil`, `math.round`, `math.trunc`, and `math.sqrt`. Clamp a value with `math.least(math.greatest(x, lo), hi)`.
 
 `instances`, `sortBy`, `one`, and `rand` are TWL's own builtins; `self`, `now`, and `e.rel` are language forms. The expression forms and `math.*` helpers come from CEL itself — a host engine may register further functions of its own, so check the developer's documentation for any extras.
@@ -401,8 +403,8 @@ Working and tested: the TWL parser; the type/identity graph (`instanceof` transi
 `extends` cycle detection, `sameas` merge with canonical naming); stored-vs-computed and
 specificity tiebreak; the LINQ query surface (`Entities` / `Entity` → `Field`, with string
 values auto-rendering); canonical set ordering; reproducible `rand`; the template renderer;
-and a CEL interpreter covering the spec's examples (`map`/`filter`/`exists`/`all`, `in`, `?:`,
-member/index, `math.*`, `one`/`sortBy`/`instances`/`rand`/`size`/`int`/`double`/`string`/`bool`,
+and a CEL interpreter covering the spec's examples (`map`/`filter`/`exists`/`all`/`reduce`, `in`, `?:`,
+member/index, `math.*`, `one`/`sortBy`/`instances`/`rand`/`size`/`sum`/`min`/`max`/`argmin`/`argmax`/`int`/`double`/`string`/`bool`,
 `now` date methods, and `session.*` event reads).
 
 Known growth points (intentionally not done yet):
