@@ -85,7 +85,7 @@ namespace TinyWorldLang.Tests
             Assert.Contains("Lorraine McFly", persona);
         }
 
-        // Mirrors SPEC.md's example section.
+        // Mirrors the language reference's example section (see README.md).
         private const string SpecExample = @"
             Person extends Entity;
             Family extends Entity;
