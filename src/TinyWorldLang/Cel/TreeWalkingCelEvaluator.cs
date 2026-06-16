@@ -12,9 +12,9 @@ namespace TinyWorldLang.Cel
     /// </summary>
     /// <remarks>
     /// Covers the subset the spec documents: <c>map/filter/exists/all/reduce</c>, <c>in</c>,
-    /// <c>?:</c>, member/index access, the <c>math.*</c> helpers, <c>one/sortBy/
-    /// instances/rand/size/sum/min/max/argmin/argmax/int/double/string/bool</c>, and
-    /// <c>now</c> date methods.
+    /// <c>?:</c>, <c>has(...)</c>, <c>cel.bind(...)</c>, member/index access, the
+    /// <c>math.*</c> helpers, <c>one/sortBy/instances/rand/size/sum/min/max/argmin/
+    /// argmax/int/double/string/bool</c>, and <c>now</c> date methods.
     /// Correctness is meant to be pinned to the official cel-spec conformance corpus
     /// (see tests/TinyWorldLang.Conformance).
     /// </remarks>
@@ -260,6 +260,8 @@ namespace TinyWorldLang.Cel
                     return EvalMath(c, scope, ctx);
                 if (tid.Name == "now" && !scope.TryGet("now", out _))
                     return EvalNowMethod(c, scope, ctx);
+                if (tid.Name == "cel" && !scope.TryGet("cel", out _))
+                    return EvalCelMacro(c, scope, ctx);
             }
 
             // Collection macros: receiver.macro(var, body).
@@ -316,6 +318,22 @@ namespace TinyWorldLang.Cel
                 }
                 case "sortBy": RequireArgCount(c, 2); return EvalSortBy(c, scope, ctx);
                 case "rand": RequireArgCount(c, 1); return Value.Double(ctx.Rand(Eval(c.Args[0], scope, ctx)));
+                case "has":
+                {
+                    // CEL's presence test: true when the argument resolves to something
+                    // present. An absent relation is the empty set -> false; a member
+                    // access that fails to resolve (e.g. navigating through a null) is
+                    // also false rather than an error, giving safe-navigation ergonomics.
+                    RequireArgCount(c, 1);
+                    try
+                    {
+                        var v = Eval(c.Args[0], scope, ctx);
+                        if (v.IsNull) return Value.Bool(false);
+                        if (v.Kind == ValueKind.List) return Value.Bool(v.AsList.Count > 0);
+                        return Value.Bool(true);
+                    }
+                    catch (CelException) { return Value.Bool(false); }
+                }
                 case "sum": RequireArgCount(c, 1); return Sum(AsList(Eval(c.Args[0], scope, ctx), "sum"));
                 case "max": RequireArgCount(c, 1); return Extreme(AsList(Eval(c.Args[0], scope, ctx), "max"), wantMax: true, "max");
                 case "min": RequireArgCount(c, 1); return Extreme(AsList(Eval(c.Args[0], scope, ctx), "min"), wantMax: false, "min");
@@ -476,6 +494,20 @@ namespace TinyWorldLang.Cel
                 if (wantMax ? cmp > 0 : cmp < 0) best = list[i];
             }
             return best;
+        }
+
+        // The CEL "bindings" extension: cel.bind(var, init, expr) evaluates `init`,
+        // binds it to `var`, and returns `expr` evaluated with that binding in scope.
+        // A local alias for a subexpression — names it once instead of repeating it.
+        private static Value EvalCelMacro(CelCall c, Scope scope, ICelContext ctx)
+        {
+            if (c.Name != "bind")
+                throw new CelException($"unknown cel.{c.Name}(...); only cel.bind(var, init, expr) is supported");
+            if (c.Args.Count != 3 || !(c.Args[0] is CelIdent varIdent))
+                throw new CelException("cel.bind(var, init, expr) takes a variable, an initial value, and an expression");
+
+            var init = Eval(c.Args[1], scope, ctx);
+            return Eval(c.Args[2], scope.Bind(varIdent.Name, init), ctx);
         }
 
         private static Value EvalMath(CelCall c, Scope scope, ICelContext ctx)

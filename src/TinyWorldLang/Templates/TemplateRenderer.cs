@@ -118,6 +118,10 @@ namespace TinyWorldLang.Templates
             var set = _resolve(owner, rel);
             foreach (var v in set)
             {
+                // A boolean false is falsy (as in standard Mustache): it renders no
+                // iteration, so a single real bool can drive a {{# flag}} branch and
+                // still be read as a bool by the host. true renders the block once.
+                if (v.Kind == ValueKind.Bool && !v.AsBool) continue;
                 string childOwner = v.Kind == ValueKind.Entity ? v.AsEntity : owner;
                 RenderInto(sb, s, blockStart, blockEnd, childOwner, v);
             }

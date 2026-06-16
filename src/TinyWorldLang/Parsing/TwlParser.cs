@@ -89,7 +89,7 @@ namespace TinyWorldLang.Parsing
         private static readonly HashSet<string> Reserved = new HashSet<string>(StringComparer.Ordinal)
         {
             "instanceof", "extends", "sameas", "true", "false", "null",
-            "self", "now", "instances", "sortBy", "one", "rand", "math",
+            "self", "now", "instances", "sortBy", "one", "rand", "math", "cel",
         };
 
         private Value ParseValue()

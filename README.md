@@ -110,11 +110,11 @@ A value runs from its opening `"` to the next unescaped `"`, so a `;`, newline, 
 
 An identifier is a letter or `_` followed by letters, digits, or `_`: `Marty`, `born_year`, `McFlyFam`.
 
-The following words are reserved and cannot be used as entity names: `instanceof extends sameas true false null self now instances sortBy one rand math`.
+The following words are reserved and cannot be used as entity names: `instanceof extends sameas true false null self now instances sortBy one rand math cel`.
 
-All but `math` are TWL's own keywords and builtins. `math` is reserved because the math helpers are reached through it as a namespace (`math.greatest(a, b)`).
+All but `math` and `cel` are TWL's own keywords and builtins. `math` and `cel` are reserved because their helpers are reached through them as namespaces (`math.greatest(a, b)`, `cel.bind(x, init, expr)`).
 
-The other CEL names you use in expressions — the macros `map`, `filter`, `exists`, `all`, `in` and the functions `int`, `double`, `string`, `bool`, `size` — are not reserved: CEL keeps function-call names and plain identifiers separate, so an entity named `size` does not interfere with a `size(...)` call. (Still, authors should avoid naming entities after them so expressions stay readable.)
+The other CEL names you use in expressions — the macros `map`, `filter`, `exists`, `all`, `in`, `reduce` and the functions `int`, `double`, `string`, `bool`, `size`, `has`, `sum`, `min`, `max`, `argmin`, `argmax` — are not reserved: CEL keeps function-call names and plain identifiers separate, so an entity named `size` does not interfere with a `size(...)` call. (Still, authors should avoid naming entities after them so expressions stay readable.)
 
 ### Entities and relations
 
@@ -159,6 +159,8 @@ After `=` you write an expression in CEL (Common Expression Language). The rule 
 Common expression forms: `list.map(x, expr)`, `list.filter(x, cond)`, `x in list`, `list.exists(x, cond)`, `list.all(x, cond)`, `size(list)`, `cond ? a : b`.
 
 Aggregations over a set: `sum(list)`, `min(list)`, `max(list)` — numeric, with `min`/`max` of an empty set giving `null` and `sum` giving `0`; a list mixing integers and doubles is an error (`sum`), same as ordinary arithmetic. The keyed picks `argmax(list, x, key)` and `argmin(list, x, key)` bind `x` to each element to evaluate `key`, then return the *element* whose key is greatest/least (canonical order, so they work for numbers, strings, or entities) — this is the "most recent event by seq" pattern, `argmax(session.events, e, e.seq)`. For a general left fold, `list.reduce(acc, x, initial, body)`: `acc` starts at `initial`, the body computes the next accumulator for each element `x`, and an empty list returns `initial` unchanged. The accumulator may itself be a list, so a fold can carry several running values at once — a count alongside a total, or a value that resets on a boundary, which a plain weighted count cannot express.
+
+Presence and local bindings: `has(expr)` is true when `expr` resolves to something present — an absent relation is the empty set, so `has(self.bornYear)` is `false` — and it reports `false` rather than erroring when its argument cannot resolve (e.g. navigating through a `null`), giving a safe-navigation check. `cel.bind(name, init, expr)` (the CEL bindings extension) evaluates `init`, binds it to `name`, and returns `expr` — a local alias so a subexpression is named once instead of repeated; nest calls for several locals.
 
 Math helpers are available under `math.`: `math.greatest(a, b)` (max), `math.least(a, b)` (min), `math.abs`, `math.sign`, `math.floor`, `math.ceil`, `math.round`, `math.trunc`, and `math.sqrt`. Clamp a value with `math.least(math.greatest(x, lo), hi)`.
 
@@ -217,6 +219,8 @@ Person lastSpoke = session.events.filter(e, e.actor == self);
 
 Note that the host may append in occurrence order, so events are assumed to be chronological. Also, events are not deduplicated. Two identical actions are two distinct events. TWL is pure, so "react to an event" means "recompute": each evaluation reads the current stream and derives fresh values. The world never mutates itself; the host appends events to the session and may persist computed results however it likes.
 
+**Do not store an event-list result in a relation.** A computed relation that returns `session.events.filter(...)` flattens those event records into the relation's *set* — and a set is deduplicated and unordered. Two identical events would silently collapse into one (undercounting), and event records have no canonical order as set members. Instead, keep the filtered stream *inside* the expression that consumes it: project it to a scalar with `size(...)` (a count), pick from it with `argmax(...)`/`one(...)`, or fold it with `reduce(...)`. It is the *scalar* result (a number, an entity, a bool) that you store in a relation, never the list of events. The same applies to any computed relation: returning a list flattens one level into the set, so only return a list when you actually want its elements as the relation's values.
+
 ### Randomness
 
 `rand(key)` returns a number in `[0, 1)`. It is stable: the same key always gives the same draw, so worlds stay reproducible. The seed comes from the game each evaluation and cannot be read or set from inside the world.
@@ -245,7 +249,7 @@ Every string value (`"..."`) is a Mustache template, rendered against the entity
 - `{{# rel}} ... {{/}}` — repeat the block for each value in the set (in canonical order); inside, `{{.}}` is the current value and names resolve on it.
 - A relation with one value renders that value; an empty relation renders nothing. A relation with more than one value renders only its canonical-first value (see [Order within a set](#order-within-a-set)) — the rest are dropped silently, so use a `{{# rel}}` block to render them all.
 
-A single boolean fact is still a one-value set, so `{{# flag}}` renders for both `true` and `false`. To branch on a condition, make a computed relation that is empty when the condition is false.
+A boolean `false` is **falsy** in a section (as in standard Mustache): `{{# flag}}` renders the block when the set holds `true` and renders nothing for `false` (or for an empty relation). So a single real boolean relation drives a branch directly — `{{# wounded}}…{{/}}` shows only when `wounded` is `true` — and the *same* relation is still readable as a `bool` by a host query, with no separate "empty-when-false" encoding needed. (An empty relation also renders nothing, so either representation works for branching.)
 
 Names in a template resolve to the owning entity's relations. If event-derived text is
 rendered, remember that every string value is a template and raw tags bypass the host
@@ -403,7 +407,7 @@ Working and tested: the TWL parser; the type/identity graph (`instanceof` transi
 `extends` cycle detection, `sameas` merge with canonical naming); stored-vs-computed and
 specificity tiebreak; the LINQ query surface (`Entities` / `Entity` → `Field`, with string
 values auto-rendering); canonical set ordering; reproducible `rand`; the template renderer;
-and a CEL interpreter covering the spec's examples (`map`/`filter`/`exists`/`all`/`reduce`, `in`, `?:`,
+and a CEL interpreter covering the spec's examples (`map`/`filter`/`exists`/`all`/`reduce`, `in`, `?:`, `has`, `cel.bind`,
 member/index, `math.*`, `one`/`sortBy`/`instances`/`rand`/`size`/`sum`/`min`/`max`/`argmin`/`argmax`/`int`/`double`/`string`/`bool`,
 `now` date methods, and `session.*` event reads).
 
