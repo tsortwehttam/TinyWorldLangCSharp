@@ -399,7 +399,7 @@ src/TinyWorldLang/            netstandard2.0, zero deps — the engine
   TwlWorld.cs                 public entry point
 
 tests/TinyWorldLang.Tests/        unit + integration tests (values, parser, world, CEL, rand, templates, query API)
-tests/TinyWorldLang.Conformance/  SKELETON harness pinning the CEL subset to cel-spec semantics
+tests/TinyWorldLang.Conformance/  data-driven harness pinning the CEL subset to cel-spec semantics
 ```
 
 ## Building & testing
@@ -422,9 +422,9 @@ member/index, `math.*`, `one`/`sortBy`/`instances`/`rand`/`size`/`int`/`double`/
 
 Known growth points (intentionally not done yet):
 
-- **Full CEL conformance.** The conformance project is a *skeleton*: a handful of canonical
-  cases plus the documented path to vendor the full `cel-spec` `.textproto` corpus and drive
-  `[Theory]` cases from it. Until that lands, treat untested CEL corners as unverified.
+- **Full CEL conformance.** The conformance project is data-driven from upstream-shaped
+  `.textproto`, but currently vendors a curated supported subset rather than the full
+  `cel-spec` corpus. Treat untested CEL corners as unverified or explicitly out of scope.
 - **Cross-platform float determinism** is by construction (basic IEEE ops, `double`), but is
   not yet locked by a golden-output test run across runtimes/architectures.
 - This is **in-process (Layer 1) only**. An optional network surface and a portable string

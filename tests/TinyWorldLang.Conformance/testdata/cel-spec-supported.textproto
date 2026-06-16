@@ -1,0 +1,393 @@
+# Curated subset of Google's CEL simple conformance testdata.
+# Source corpus: https://github.com/google/cel-spec/tree/master/tests/simple/testdata
+# Kept in the upstream textproto shape so additional supported cases can be added
+# mechanically as TWL's CEL subset grows.
+
+name: "cel_spec_supported"
+description: "Scalar-result CEL simple-suite cases supported by TinyWorldLang's tree-walking evaluator."
+
+section {
+  name: "basic"
+  test {
+    name: "self_eval_int_zero"
+    expr: "0"
+    value: { int64_value: 0 }
+  }
+  test {
+    name: "self_eval_int_nonzero"
+    expr: "42"
+    value: { int64_value: 42 }
+  }
+  test {
+    name: "self_eval_float_zero"
+    expr: "0.0"
+    value: { double_value: 0 }
+  }
+  test {
+    name: "self_eval_float_nonzero"
+    expr: "1.5"
+    value: { double_value: 1.5 }
+  }
+  test {
+    name: "self_eval_string_empty"
+    expr: "''"
+    value: { string_value: "" }
+  }
+  test {
+    name: "self_eval_string_excl"
+    expr: "'!'"
+    value: { string_value: "!" }
+  }
+  test {
+    name: "self_eval_bool_false"
+    expr: "false"
+    value: { bool_value: false }
+  }
+  test {
+    name: "self_eval_bool_true"
+    expr: "true"
+    value: { bool_value: true }
+  }
+  test {
+    name: "self_eval_null"
+    expr: "null"
+    value: { null_value: NULL_VALUE }
+  }
+}
+
+section {
+  name: "integer_math"
+  test {
+    name: "add_positive_positive"
+    expr: "40 + 2"
+    value: { int64_value: 42 }
+  }
+  test {
+    name: "add_positive_negative"
+    expr: "42 + (-7)"
+    value: { int64_value: 35 }
+  }
+  test {
+    name: "sub_positive_positive"
+    expr: "42 - 12"
+    value: { int64_value: 30 }
+  }
+  test {
+    name: "multiply_positive_negative"
+    expr: "40 * (-2)"
+    value: { int64_value: -80 }
+  }
+  test {
+    name: "divide_negative_negative"
+    expr: "-80 / (-2)"
+    value: { int64_value: 40 }
+  }
+  test {
+    name: "mod_positive_positive"
+    expr: "47 % 5"
+    value: { int64_value: 2 }
+  }
+  test {
+    name: "mod_negative_positive"
+    expr: "-3 % 5"
+    value: { int64_value: -3 }
+  }
+  test {
+    name: "unary_minus_pos"
+    expr: "-(42)"
+    value: { int64_value: -42 }
+  }
+  test {
+    name: "add_commutative"
+    expr: "75 + 15 == 15 + 75"
+    value: { bool_value: true }
+  }
+  test {
+    name: "add_mul_distribute"
+    expr: "5 * (15 + 25) == 5 * 15 + 5 * 25"
+    value: { bool_value: true }
+  }
+}
+
+section {
+  name: "fp_math"
+  test {
+    name: "add_positive_positive"
+    expr: "4.25 + 15.25"
+    value: { double_value: 19.5 }
+  }
+  test {
+    name: "sub_positive_negative"
+    expr: "42.875 - (-22.0)"
+    value: { double_value: 64.875 }
+  }
+  test {
+    name: "multiply_negative_negative"
+    expr: "-3.0 * (-2.5)"
+    value: { double_value: 7.5 }
+  }
+  test {
+    name: "divide_positive_positive"
+    expr: "0.0625 / 0.002"
+    value: { double_value: 31.25 }
+  }
+  test {
+    name: "negative"
+    expr: "-(4.5)"
+    value: { double_value: -4.5 }
+  }
+  test {
+    name: "mul_commutative"
+    expr: "1.5 * 25.875 == 25.875 * 1.5"
+    value: { bool_value: true }
+  }
+}
+
+section {
+  name: "comparisons"
+  test {
+    name: "eq_int"
+    expr: "1 == 1"
+    value: { bool_value: true }
+  }
+  test {
+    name: "not_eq_int"
+    expr: "-1 == 1"
+    value: { bool_value: false }
+  }
+  test {
+    name: "eq_int_double"
+    expr: "1 == 1.0"
+    value: { bool_value: true }
+  }
+  test {
+    name: "not_eq_int_double"
+    expr: "2 == 1.0"
+    value: { bool_value: false }
+  }
+  test {
+    name: "lt_int"
+    expr: "2 < 3"
+    value: { bool_value: true }
+  }
+  test {
+    name: "lte_int_eq"
+    expr: "1 <= 1"
+    value: { bool_value: true }
+  }
+  test {
+    name: "gt_double"
+    expr: "2.0 > 1.0"
+    value: { bool_value: true }
+  }
+  test {
+    name: "gte_string"
+    expr: "'abcd' >= 'abc'"
+    value: { bool_value: true }
+  }
+  test {
+    name: "eq_string"
+    expr: "'' == \"\""
+    value: { bool_value: true }
+  }
+  test {
+    name: "not_eq_string_case"
+    expr: "'abc' == 'ABC'"
+    value: { bool_value: false }
+  }
+  test {
+    name: "eq_null"
+    expr: "null == null"
+    value: { bool_value: true }
+  }
+  test {
+    name: "eq_bool"
+    expr: "true == true"
+    value: { bool_value: true }
+  }
+  test {
+    name: "eq_list_numbers"
+    expr: "[1, 2, 3] == [1, 2, 3]"
+    value: { bool_value: true }
+  }
+  test {
+    name: "not_eq_list_order"
+    expr: "[1, 2, 3] == [1, 3, 2]"
+    value: { bool_value: false }
+  }
+  test {
+    name: "elem_in_list"
+    expr: "'elem' in ['elem', 'elemA', 'elemB']"
+    value: { bool_value: true }
+  }
+  test {
+    name: "elem_not_in_list"
+    expr: "'not' in ['elem1', 'elem2', 'elem3']"
+    value: { bool_value: false }
+  }
+}
+
+section {
+  name: "logic"
+  test {
+    name: "conditional_true_case"
+    expr: "true ? 1 : 2"
+    value: { int64_value: 1 }
+  }
+  test {
+    name: "conditional_false_case"
+    expr: "false ? 'foo' : 'bar'"
+    value: { string_value: "bar" }
+  }
+  test {
+    name: "and_all_true"
+    expr: "true && true"
+    value: { bool_value: true }
+  }
+  test {
+    name: "and_false_left"
+    expr: "false && true"
+    value: { bool_value: false }
+  }
+  test {
+    name: "and_short_circuit_error_left"
+    expr: "false && (2 / 0 > 3 ? false : true)"
+    value: { bool_value: false }
+  }
+  test {
+    name: "or_false_left"
+    expr: "false || true"
+    value: { bool_value: true }
+  }
+  test {
+    name: "or_short_circuit_error_left"
+    expr: "true || (2 / 0 > 3 ? false : true)"
+    value: { bool_value: true }
+  }
+  test {
+    name: "not_false"
+    expr: "!false"
+    value: { bool_value: true }
+  }
+}
+
+section {
+  name: "lists"
+  test {
+    name: "index_zero_based"
+    expr: "[7, 8, 9][0]"
+    value: { int64_value: 7 }
+  }
+  test {
+    name: "index_middle"
+    expr: "[0, 1, 1, 2, 3, 5, 8, 13][4]"
+    value: { int64_value: 3 }
+  }
+  test {
+    name: "in_empty"
+    expr: "7 in []"
+    value: { bool_value: false }
+  }
+  test {
+    name: "in_middle"
+    expr: "3 in [5, 4, 3, 2, 1]"
+    value: { bool_value: true }
+  }
+}
+
+section {
+  name: "macros"
+  test {
+    name: "exists_list_elem_all_true"
+    expr: "[1, 2, 3].exists(e, e > 0)"
+    value: { bool_value: true }
+  }
+  test {
+    name: "exists_list_elem_none_true"
+    expr: "[1, 2, 3].exists(e, e > 3)"
+    value: { bool_value: false }
+  }
+  test {
+    name: "exists_list_empty"
+    expr: "[].exists(e, e == 2)"
+    value: { bool_value: false }
+  }
+  test {
+    name: "all_list_elem_all_true"
+    expr: "[1, 2, 3].all(e, e > 0)"
+    value: { bool_value: true }
+  }
+  test {
+    name: "all_list_elem_some_true"
+    expr: "[1, 2, 3].all(e, e == 2)"
+    value: { bool_value: false }
+  }
+  test {
+    name: "all_list_empty"
+    expr: "[].all(e, e > 0)"
+    value: { bool_value: true }
+  }
+  test {
+    name: "map_list_many"
+    expr: "[2, 4, 6].map(n, n / 2) == [1, 2, 3]"
+    value: { bool_value: true }
+  }
+  test {
+    name: "filter_list_some"
+    expr: "[0, 1, 2, 3, 4].filter(x, x % 2 == 1) == [1, 3]"
+    value: { bool_value: true }
+  }
+}
+
+section {
+  name: "string"
+  test {
+    name: "size_empty"
+    expr: "size('')"
+    value: { int64_value: 0 }
+  }
+  test {
+    name: "size_ascii"
+    expr: "size('four')"
+    value: { int64_value: 4 }
+  }
+  test {
+    name: "size_unicode"
+    expr: "size('πέντε')"
+    value: { int64_value: 5 }
+  }
+  test {
+    name: "concat_true"
+    expr: "'he' + 'llo'"
+    value: { string_value: "hello" }
+  }
+  test {
+    name: "concat_with_spaces"
+    expr: "'hello' + ' ' == 'hello'"
+    value: { bool_value: false }
+  }
+  test {
+    name: "concat_empty_string_beginning"
+    expr: "'' + 'abc'"
+    value: { string_value: "abc" }
+  }
+}
+
+section {
+  name: "twl_math_helpers"
+  test {
+    name: "math_greatest"
+    expr: "math.greatest(3, 7)"
+    value: { int64_value: 7 }
+  }
+  test {
+    name: "math_least"
+    expr: "math.least(3, 7)"
+    value: { int64_value: 3 }
+  }
+  test {
+    name: "math_floor"
+    expr: "int(math.floor(3.9))"
+    value: { int64_value: 3 }
+  }
+}

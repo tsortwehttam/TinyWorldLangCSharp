@@ -1,4 +1,4 @@
-# CEL conformance harness (skeleton)
+# CEL conformance harness
 
 This project exists to answer one question with an external standard rather than our own
 judgment: **does our CEL subset mean the same thing as CEL?**
@@ -13,17 +13,23 @@ conformance corpus:
 
 ## Current state
 
-`CelConformanceTests.cs` runs a small set of canonical cases (mirroring the `basic`,
-`comparisons`, `logic`, `lists`, `macros`, `string`, and `math_ext` sections) through
-`TreeWalkingCelEvaluator` with a world-free context. This is a *starting subset*, not full
-coverage.
+`CelConformanceTests.cs` loads upstream-shaped `.textproto` files from `testdata/` and runs
+the cases through `TreeWalkingCelEvaluator` with a world-free context.
+
+The first vendored data file, `testdata/cel-spec-supported.textproto`, is a curated scalar
+subset of Google's `tests/simple/testdata` corpus. It covers supported basics, int/double
+math, comparisons, logic, list indexing/membership, macros, strings, and TWL's documented
+`math.*` helpers.
+
+This is still not full CEL coverage. It deliberately excludes areas TWL does not currently
+claim: protobuf messages, maps, bytes, uints, wrappers, dynamic bindings, optional values,
+full timestamp arithmetic, and string extension methods such as `startsWith`.
 
 ## Growth path
 
-1. Vendor the `.textproto` files for the subset the spec declares (skip sections TWL does not
-   support — protobuf messages, maps, full timestamp arithmetic, etc.; cel-spec is explicitly
-   organized to allow implementing a prescribed subset).
-2. Add a minimal textproto reader (or a one-time conversion to JSON via the Go/▢ tooling) so the
-   data files drive `[Theory]` cases directly.
+1. Grow `testdata/cel-spec-supported.textproto` by importing more cases from the upstream
+   files whenever the evaluator supports the expression/result shape.
+2. Add explicit skip metadata if we decide to vendor whole upstream files and filter them
+   mechanically.
 3. Treat any case the corpus covers that we fail as either a bug to fix or a section to formally
    declare out of scope in the language reference (top-level `README.md`).

@@ -16,4 +16,8 @@
     <ProjectReference Include="..\..\src\TinyWorldLang\TinyWorldLang.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="testdata\*.textproto" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
