@@ -15,6 +15,8 @@ namespace TinyWorldLang.Model
         private readonly Dictionary<string, Dictionary<string, ValueSet>> _stored;
         // relation -> rules that produce it (each tagged with its declaring type)
         private readonly Dictionary<string, List<ComputedFact>> _rules;
+        // (name, arity) -> module-level function
+        private readonly Dictionary<(string, int), FunctionDecl> _functions;
         private readonly TypeGraph _types;
         private readonly Dictionary<string, string> _canonical; // raw name -> canonical name
         private readonly string[] _entities;
@@ -22,12 +24,14 @@ namespace TinyWorldLang.Model
         internal World(
             Dictionary<string, Dictionary<string, ValueSet>> stored,
             Dictionary<string, List<ComputedFact>> rules,
+            Dictionary<(string, int), FunctionDecl> functions,
             TypeGraph types,
             Dictionary<string, string> canonical,
             HashSet<string> entities)
         {
             _stored = stored;
             _rules = rules;
+            _functions = functions;
             _types = types;
             _canonical = canonical;
             var orderedEntities = new List<string>(entities);
@@ -63,6 +67,12 @@ namespace TinyWorldLang.Model
                 foreach (var rule in list)
                     yield return rule;
         }
+
+        /// <summary>The module function with this name and arity, or null if none is declared.</summary>
+        public FunctionDecl? LookupFunction(string name, int arity) =>
+            _functions.TryGetValue((name, arity), out var fn) ? fn : null;
+
+        internal IEnumerable<FunctionDecl> Functions() => _functions.Values;
 
         public IReadOnlyList<string> Instances(string canonicalType)
         {

@@ -55,6 +55,14 @@ namespace TinyWorldLang
                     throw new TwlLoadException($"in rule '{rule.Type} {rule.Relation}': {ex.Message}", rule.Line);
                 }
             }
+            foreach (var fn in world.Functions())
+            {
+                try { evaluator.Compile(fn.Expression); }
+                catch (CelException ex)
+                {
+                    throw new TwlLoadException($"in function '{fn.Name}': {ex.Message}", fn.Line);
+                }
+            }
             return new TwlWorld(world, evaluator, escaper);
         }
 

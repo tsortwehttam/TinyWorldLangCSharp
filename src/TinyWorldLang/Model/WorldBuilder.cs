@@ -25,6 +25,7 @@ namespace TinyWorldLang.Model
             var supertypes = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
             var grouped = new Dictionary<string, Dictionary<string, List<Value>>>(StringComparer.Ordinal);
             var rules = new Dictionary<string, List<ComputedFact>>(StringComparer.Ordinal);
+            var functions = new Dictionary<(string, int), FunctionDecl>();
             var entities = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var stmt in parsed.Statements)
@@ -42,22 +43,35 @@ namespace TinyWorldLang.Model
                         Value value = Canonicalize(fact.Value, Canon);
                         AddStored(grouped, subject, fact.Relation, value);
                         entities.Add(subject);
-                        if (value.Kind == ValueKind.Entity) entities.Add(value.AsEntity);
+                        CollectEntities(value, entities);
                         break;
 
                     case ComputedFact rule:
                         string type = Canon(rule.Type);
-                        var canonRule = new ComputedFact(type, rule.Relation, rule.Expression, rule.Line);
+                        var canonRule = new ComputedFact(type, rule.Relation, rule.Expression, rule.Line, rule.Parameters);
                         if (!rules.TryGetValue(rule.Relation, out var list))
                             rules[rule.Relation] = list = new List<ComputedFact>();
                         list.Add(canonRule);
                         entities.Add(type);
+                        break;
+
+                    case FunctionDecl fn:
+                        var key = (fn.Name, fn.Parameters.Count);
+                        if (functions.ContainsKey(key))
+                            throw new TwlLoadException(
+                                $"function '{fn.Name}' is declared twice with {fn.Parameters.Count} parameter(s)", fn.Line);
+                        functions[key] = fn;
                         break;
                 }
             }
 
             // 3. extends must form no cycles.
             DetectExtendsCycles(supertypes);
+
+            // 3b. A function name must not collide with a relation read without a call
+            //     (a stored relation or a 0-arity computed rule), to avoid confusion
+            //     between `e.f` (a relation read) and `f(...)` (a function call).
+            ValidateFunctionNames(functions, grouped, rules);
 
             // 4. Materialize stored value sets.
             var stored = new Dictionary<string, Dictionary<string, ValueSet>>(StringComparer.Ordinal);
@@ -69,7 +83,29 @@ namespace TinyWorldLang.Model
                 stored[entityKv.Key] = rels;
             }
 
-            return new World(stored, rules, new TypeGraph(directTypes, supertypes), canonical, entities);
+            return new World(stored, rules, functions, new TypeGraph(directTypes, supertypes), canonical, entities);
+        }
+
+        private static void ValidateFunctionNames(
+            Dictionary<(string, int), FunctionDecl> functions,
+            Dictionary<string, Dictionary<string, List<Value>>> grouped,
+            Dictionary<string, List<ComputedFact>> rules)
+        {
+            // Relation names read without a call: stored relations + 0-arity rules.
+            var plainRelations = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var rels in grouped.Values)
+                foreach (var name in rels.Keys)
+                    plainRelations.Add(name);
+            foreach (var kv in rules)
+                foreach (var rule in kv.Value)
+                    if (rule.Parameters.Count == 0)
+                        plainRelations.Add(rule.Relation);
+
+            foreach (var fn in functions.Values)
+                if (plainRelations.Contains(fn.Name))
+                    throw new TwlLoadException(
+                        $"function '{fn.Name}' clashes with a relation of the same name — " +
+                        "a name cannot be both a function and a stored/0-arity relation", fn.Line);
         }
 
         private static void ApplyStructural(
@@ -92,8 +128,25 @@ namespace TinyWorldLang.Model
             }
         }
 
-        private static Value Canonicalize(Value v, Func<string, string> canon) =>
-            v.Kind == ValueKind.Entity ? Value.Entity(canon(v.AsEntity)) : v;
+        private static Value Canonicalize(Value v, Func<string, string> canon)
+        {
+            if (v.Kind == ValueKind.Entity) return Value.Entity(canon(v.AsEntity));
+            if (v.Kind == ValueKind.Record)
+            {
+                var fields = new Dictionary<string, Value>(StringComparer.Ordinal);
+                foreach (var kv in v.AsRecord) fields[kv.Key] = Canonicalize(kv.Value, canon);
+                return Value.Record(fields);
+            }
+            return v;
+        }
+
+        /// <summary>Register every entity name reachable from a stored value (including record fields).</summary>
+        private static void CollectEntities(Value v, HashSet<string> entities)
+        {
+            if (v.Kind == ValueKind.Entity) entities.Add(v.AsEntity);
+            else if (v.Kind == ValueKind.Record)
+                foreach (var kv in v.AsRecord) CollectEntities(kv.Value, entities);
+        }
 
         private static void AddStored(
             Dictionary<string, Dictionary<string, List<Value>>> grouped,

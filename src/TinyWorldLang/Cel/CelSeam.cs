@@ -47,6 +47,25 @@ namespace TinyWorldLang.Cel
 
         /// <summary>Resolve a bare identifier to its canonical entity value.</summary>
         Value CanonicalEntity(string name);
+
+        /// <summary>
+        /// A bound local (a parameter of the rule/function being evaluated), if any.
+        /// Consulted after lexical scope but before the <c>self</c>/<c>now</c>/entity
+        /// fallback, so a parameter shadows an entity of the same name.
+        /// </summary>
+        bool TryGetLocal(string name, out Value value);
+
+        /// <summary>
+        /// Call a parameter rule on an entity receiver (the <c>e.rel(a, b)</c> form):
+        /// dispatched on the receiver's type, its result coerced into a relation set.
+        /// </summary>
+        ValueSet CallRule(Value receiver, string name, IReadOnlyList<Value> args);
+
+        /// <summary>
+        /// Call a module-level function (the <c>name(a, b)</c> form): no receiver, no
+        /// dispatch; returns the body's value unchanged.
+        /// </summary>
+        Value CallFunction(string name, IReadOnlyList<Value> args);
     }
 
     /// <summary>A CEL syntax or evaluation error.</summary>

@@ -29,20 +29,50 @@ namespace TinyWorldLang.Parsing
     }
 
     /// <summary>
-    /// A computed rule: <c>TYPE RELATION = EXPR;</c>. Applies to every instance of
+    /// A computed rule: <c>TYPE RELATION = EXPR;</c>, or a parameter rule
+    /// <c>TYPE RELATION(p1, p2) = EXPR;</c>. Applies to every instance of
     /// <see cref="Type"/> (and its subtypes). The CEL source is kept verbatim; the
-    /// configured <c>ICelEvaluator</c> compiles it lazily.
+    /// configured <c>ICelEvaluator</c> compiles it lazily. A 0-arity rule (empty
+    /// <see cref="Parameters"/>) is read as <c>e.relation</c>; a parameter rule is
+    /// called as <c>e.relation(a, b)</c> with the arguments bound to the parameters.
     /// </summary>
     public sealed class ComputedFact : Statement
     {
+        private static readonly IReadOnlyList<string> NoParameters = new string[0];
+
         public string Type { get; }
         public string Relation { get; }
         public string Expression { get; }
 
-        public ComputedFact(string type, string relation, string expression, int line) : base(line)
+        /// <summary>The declared parameter names, or empty for a plain 0-arity rule.</summary>
+        public IReadOnlyList<string> Parameters { get; }
+
+        public ComputedFact(string type, string relation, string expression, int line,
+            IReadOnlyList<string>? parameters = null) : base(line)
         {
             Type = type;
             Relation = relation;
+            Expression = expression;
+            Parameters = parameters ?? NoParameters;
+        }
+    }
+
+    /// <summary>
+    /// A module-level function: <c>fun NAME(p1, p2) = EXPR;</c>. Unlike a parameter
+    /// rule it has no <c>self</c> and no type dispatch; it is called as
+    /// <c>NAME(a, b)</c> and returns its value unchanged (no set coercion), so it may
+    /// return a scalar, a list, or a record.
+    /// </summary>
+    public sealed class FunctionDecl : Statement
+    {
+        public string Name { get; }
+        public IReadOnlyList<string> Parameters { get; }
+        public string Expression { get; }
+
+        public FunctionDecl(string name, IReadOnlyList<string> parameters, string expression, int line) : base(line)
+        {
+            Name = name;
+            Parameters = parameters;
             Expression = expression;
         }
     }

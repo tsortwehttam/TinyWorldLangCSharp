@@ -74,6 +74,7 @@ namespace TinyWorldLang.Cel
         private static Value EvalIdent(string name, Scope scope, ICelContext ctx)
         {
             if (scope.TryGet(name, out var v)) return v;
+            if (ctx.TryGetLocal(name, out var local)) return local;
             if (name == "self") return ctx.Self;
             if (name == "now") return Value.Timestamp(ctx.Now);
             // Any other bare identifier is an entity (the spec: "any id is an entity").
@@ -273,7 +274,16 @@ namespace TinyWorldLang.Cel
                     return EvalReduce(c, scope, ctx);
             }
 
-            throw new CelException($"unknown method '.{c.Name}(...)'");
+            // A parameter rule call on an entity receiver: receiver.rel(a, b).
+            // Method calls dispatch on entity receivers only.
+            var target = Eval(c.Target!, scope, ctx);
+            if (target.Kind == ValueKind.Entity)
+            {
+                var args = EvalArgs(c.Args, scope, ctx);
+                return SetToList(ctx.CallRule(target, c.Name, args));
+            }
+
+            throw new CelException($"unknown method '.{c.Name}(...)' on {target.Kind}");
         }
 
         private static Value EvalGlobalCall(CelCall c, Scope scope, ICelContext ctx)
@@ -340,8 +350,19 @@ namespace TinyWorldLang.Cel
                 case "argmax": return EvalArgExtreme(c, scope, ctx, wantMax: true);
                 case "argmin": return EvalArgExtreme(c, scope, ctx, wantMax: false);
                 default:
-                    throw new CelException($"unknown function '{c.Name}(...)'");
+                {
+                    // Not a built-in: a module-level function call, name(a, b).
+                    var args = EvalArgs(c.Args, scope, ctx);
+                    return ctx.CallFunction(c.Name, args);
+                }
             }
+        }
+
+        private static IReadOnlyList<Value> EvalArgs(IReadOnlyList<CelExpr> exprs, Scope scope, ICelContext ctx)
+        {
+            var args = new List<Value>(exprs.Count);
+            foreach (var a in exprs) args.Add(Eval(a, scope, ctx));
+            return args;
         }
 
         private static Value EvalSortBy(CelCall c, Scope scope, ICelContext ctx)

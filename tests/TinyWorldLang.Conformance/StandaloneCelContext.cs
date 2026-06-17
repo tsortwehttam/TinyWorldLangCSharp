@@ -27,5 +27,17 @@ namespace TinyWorldLang.Conformance
         public IReadOnlyList<Event> SessionStream(string name) => Array.Empty<Event>();
 
         public Value CanonicalEntity(string name) => Value.Entity(name);
+
+        public bool TryGetLocal(string name, out Value value)
+        {
+            value = Value.Null;
+            return false;
+        }
+
+        public ValueSet CallRule(Value receiver, string name, IReadOnlyList<Value> args) =>
+            throw new CelException("parameter rules are not available in standalone CEL conformance");
+
+        public Value CallFunction(string name, IReadOnlyList<Value> args) =>
+            throw new CelException($"unknown function '{name}(...)'");
     }
 }

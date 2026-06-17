@@ -46,7 +46,15 @@ namespace TinyWorldLang.Parsing
         private Statement ParseStatement()
         {
             int line = _line;
-            string first = ParseEntityIdentifier("subject/type");
+            string first = ParseIdentifier("subject/type");
+
+            // A module-level function declaration: `fun NAME(p1, p2) = EXPR;`.
+            if (first == "fun")
+                return ParseFunctionDecl(line);
+
+            if (Reserved.Contains(first))
+                throw new TwlLoadException($"'{first}' is reserved and cannot be used as an entity name", line);
+
             SkipTrivia();
             string relation = ParseIdentifier("relation");
 
@@ -59,6 +67,21 @@ namespace TinyWorldLang.Parsing
             }
 
             SkipTrivia();
+
+            // A parameter rule: `TYPE RELATION(p1, p2) = EXPR;`.
+            if (!AtEnd && Cur == '(')
+            {
+                var ps = ParseParameterList();
+                SkipTrivia();
+                if (AtEnd || Cur != '=')
+                    throw new TwlLoadException("expected '=' after a parameter list", line);
+                Advance(); // consume '='
+                string body = ScanExpressionToSemicolon().Trim();
+                if (body.Length == 0)
+                    throw new TwlLoadException("parameter rule has an empty expression", line);
+                return new ComputedFact(first, relation, body, line, ps);
+            }
+
             if (!AtEnd && Cur == '=')
             {
                 Advance(); // consume '='
@@ -71,6 +94,52 @@ namespace TinyWorldLang.Parsing
             Value value = ParseValue();
             ExpectSemicolon();
             return new StoredFact(first, relation, value, line);
+        }
+
+        private FunctionDecl ParseFunctionDecl(int line)
+        {
+            string name = ParseIdentifier("function name");
+            if (Reserved.Contains(name))
+                throw new TwlLoadException($"'{name}' is reserved and cannot be used as a function name", line);
+            SkipTrivia();
+            if (AtEnd || Cur != '(')
+                throw new TwlLoadException("expected '(' after a function name", line);
+            var ps = ParseParameterList();
+            SkipTrivia();
+            if (AtEnd || Cur != '=')
+                throw new TwlLoadException("expected '=' after a function's parameter list", line);
+            Advance(); // consume '='
+            string body = ScanExpressionToSemicolon().Trim();
+            if (body.Length == 0)
+                throw new TwlLoadException("function has an empty expression", line);
+            return new FunctionDecl(name, ps, body, line);
+        }
+
+        /// <summary>Parse <c>( p1, p2, ... )</c>; assumes the cursor is at the '('.</summary>
+        private IReadOnlyList<string> ParseParameterList()
+        {
+            Advance(); // consume '('
+            var ps = new List<string>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            SkipTrivia();
+            if (!AtEnd && Cur != ')')
+            {
+                while (true)
+                {
+                    string p = ParseIdentifier("parameter name");
+                    if (!seen.Add(p))
+                        throw new TwlLoadException($"duplicate parameter '{p}'", _line);
+                    ps.Add(p);
+                    SkipTrivia();
+                    if (!AtEnd && Cur == ',') { Advance(); SkipTrivia(); continue; }
+                    break;
+                }
+            }
+            SkipTrivia();
+            if (AtEnd || Cur != ')')
+                throw new TwlLoadException("expected ')' to close a parameter list", _line);
+            Advance(); // consume ')'
+            return ps;
         }
 
         private static bool TryBuiltinRelation(string name, out BuiltinRelation rel)
@@ -89,7 +158,7 @@ namespace TinyWorldLang.Parsing
         private static readonly HashSet<string> Reserved = new HashSet<string>(StringComparer.Ordinal)
         {
             "instanceof", "extends", "sameas", "true", "false", "null",
-            "self", "now", "instances", "sortBy", "one", "rand", "math", "cel",
+            "self", "now", "instances", "sortBy", "one", "rand", "math", "cel", "fun",
         };
 
         private Value ParseValue()
