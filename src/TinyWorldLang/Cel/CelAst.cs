@@ -24,6 +24,13 @@ namespace TinyWorldLang.Cel
         public CelListExpr(IReadOnlyList<CelExpr> items) => Items = items;
     }
 
+    /// <summary>A record literal: <c>{ key: expr, key: expr }</c>.</summary>
+    internal sealed class CelRecordExpr : CelExpr
+    {
+        public IReadOnlyList<(string Key, CelExpr Value)> Fields { get; }
+        public CelRecordExpr(IReadOnlyList<(string, CelExpr)> fields) => Fields = fields;
+    }
+
     internal sealed class CelUnary : CelExpr
     {
         public string Op { get; }

@@ -61,6 +61,7 @@ namespace TinyWorldLang.Cel
                 case CelLit lit: return lit.Value;
                 case CelIdent id: return EvalIdent(id.Name, scope, ctx);
                 case CelListExpr list: return EvalList(list, scope, ctx);
+                case CelRecordExpr rec: return EvalRecord(rec, scope, ctx);
                 case CelUnary u: return EvalUnary(u, scope, ctx);
                 case CelBinary b: return EvalBinary(b, scope, ctx);
                 case CelTernary t: return EvalTernary(t, scope, ctx);
@@ -86,6 +87,18 @@ namespace TinyWorldLang.Cel
             var items = new List<Value>(list.Items.Count);
             foreach (var item in list.Items) items.Add(Eval(item, scope, ctx));
             return Value.List(items);
+        }
+
+        private static Value EvalRecord(CelRecordExpr rec, Scope scope, ICelContext ctx)
+        {
+            var fields = new Dictionary<string, Value>(rec.Fields.Count, StringComparer.Ordinal);
+            foreach (var (key, valueExpr) in rec.Fields)
+            {
+                if (fields.ContainsKey(key))
+                    throw new CelException($"duplicate field '{key}' in record literal");
+                fields[key] = Eval(valueExpr, scope, ctx);
+            }
+            return Value.Record(fields);
         }
 
         private static Value EvalUnary(CelUnary u, Scope scope, ICelContext ctx)

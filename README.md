@@ -34,6 +34,7 @@ authoring reference, or [the C# engine](#c-engine--query-api) to embed it.
   - [Statements](#statements) · [Values](#values) · [Names](#names) ·
     [Entities and relations](#entities-and-relations) · [Order within a set](#order-within-a-set) ·
     [Types and identity](#types-and-identity) · [Computed facts](#computed-facts) ·
+    [Functions and parameter rules](#functions-and-parameter-rules) ·
     [Evaluation model](#evaluation-model) · [Events](#events) · [Randomness](#randomness) ·
     [Tiebreaks](#tiebreaks) · [Templates](#templates) · [Example](#example)
 - [C# engine & query API](#c-engine--query-api)
@@ -78,13 +79,15 @@ they imply. To resume a game, reload world and session and evaluate.
 
 ### Statements
 
-A world is a list of statements, each ending in `;`. There are two kinds:
+A world is a list of statements, each ending in `;`. The kinds are:
 
 ```
 // line comment
 /* block comment */
-SUBJECT RELATION VALUE; // a stored fact
-TYPE RELATION = EXPR; // a computed fact
+SUBJECT RELATION VALUE;        // a stored fact
+TYPE RELATION = EXPR;          // a computed fact
+TYPE RELATION(p1, p2) = EXPR;  // a parameter rule  (see Functions and parameter rules)
+fun NAME(p1, p2) = EXPR;       // a module function (see Functions and parameter rules)
 ```
 
 Comments are trivia and may appear anywhere whitespace can — including inside a computed expression, which often spans several lines. A `//` runs to end of line and `/* ... */` spans lines; a lone `/` is left intact as the division operator. (Comments inside a string value, on the other hand, are ordinary text — a `"..."` is verbatim content.)
@@ -97,6 +100,7 @@ A `VALUE` is one of:
 - number — `123`, `1.5`. A literal with no decimal point is an integer (`123`, `1968`); one with a decimal point is a double (`1.5`, `1.0`). The type is syntactic and fixed: `1968` is always an integer, `1968.0` always a double. Arithmetic never mixes the two (see [Computed facts](#computed-facts))
 - boolean — `true`, `false`
 - string — `"..."` — a Mustache template (see [Templates](#templates)), rendered against the owning entity when read; may span multiple lines. Text with no `{{` tags renders to itself, so an ordinary value like `"Marty"` is just its literal text
+- record — `{ key: value, key: value }` — an identity-less, immutable bundle of named fields (a trailing comma is allowed). Field values are themselves values — strings, numbers, booleans, entities, or nested records. Read a field with `rec.key`. Records are storable: two records are equal when they have the same fields with equal values (field order does not matter), so a relation deduplicates and orders them like any other value. Unlike entities, records are never declared, never typed, and never dispatched on. (A string field inside a stored record is returned raw, not template-rendered — only a top-level string relation value is a template.)
 
 Stored strings are author content. Session text is never parsed as world source, but if a
 computed relation returns a session string and that relation is rendered, it follows the same
@@ -112,7 +116,7 @@ A value runs from its opening `"` to the next unescaped `"`, so a `;`, newline, 
 
 An identifier is a letter or `_` followed by letters, digits, or `_`: `Marty`, `born_year`, `McFlyFam`.
 
-The following words are reserved and cannot be used as entity names: `instanceof extends sameas true false null self now instances sortBy one rand math cel`.
+The following words are reserved and cannot be used as entity names: `instanceof extends sameas true false null self now instances sortBy one rand math cel fun`.
 
 All but `math` and `cel` are TWL's own keywords and builtins. `math` and `cel` are reserved because their helpers are reached through them as namespaces (`math.greatest(a, b)`, `cel.bind(x, init, expr)`).
 
@@ -129,7 +133,7 @@ The other CEL names you use in expressions — the macros `map`, `filter`, `exis
 
 ### Order within a set
 
-A set has no order of its own, but some operations need one: `one`, `sortBy`, and rendering a multi-value relation in a template. For these, TWL always uses the same canonical order, so results are reproducible. Values are grouped by kind — booleans, then numbers, then strings, then entities — and ordered within each kind: `false` before `true`, numbers by value, strings by Unicode code point, entities by name. A string sorts by its unrendered source text, not its rendered output. So `one(s)` returns the first value in this order, and `sortBy(list, "rel")` orders `list` by each element's value for `rel`. Note code-point order is not dictionary order: every uppercase letter sorts before every lowercase one (`"Zoe"` before `"adam"`), and digits before letters — so sorting names is case-sensitive.
+A set has no order of its own, but some operations need one: `one`, `sortBy`, and rendering a multi-value relation in a template. For these, TWL always uses the same canonical order, so results are reproducible. Values are grouped by kind — booleans, then numbers, then strings, then entities, then records — and ordered within each kind: `false` before `true`, numbers by value, strings by Unicode code point, entities by name, records by their sorted field names and then by those fields' values. A string sorts by its unrendered source text, not its rendered output. So `one(s)` returns the first value in this order, and `sortBy(list, "rel")` orders `list` by each element's value for `rel`. Note code-point order is not dictionary order: every uppercase letter sorts before every lowercase one (`"Zoe"` before `"adam"`), and digits before letters — so sorting names is case-sensitive.
 
 ### Types and identity
 
@@ -168,7 +172,7 @@ Math helpers are available under `math.`: `math.greatest(a, b)` (max), `math.lea
 
 `instances`, `sortBy`, `one`, and `rand` are TWL's own builtins; `self`, `now`, and `e.rel` are language forms. The expression forms and `math.*` helpers come from CEL itself — a host engine may register further functions of its own, so check the developer's documentation for any extras.
 
-A rule's result becomes the relation's set. Every relation holds a set, so the expression's value is coerced to one: a list or set result contributes its elements (flattened one level — nested lists are not allowed); a single scalar (number, boolean, string, entity) becomes a one-element set; and `null` — including any `null` sitting inside a returned list — contributes nothing, so a rule that evaluates to `null` leaves the relation empty (`null` is never stored, per [Values](#values)). This is why `one()` on a rule that produced `null` gives `null` straight back: the set is empty.
+A rule's result becomes the relation's set. Every relation holds a set, so the expression's value is coerced to one: a list or set result contributes its elements (flattened one level — nested lists are not allowed); a single value (number, boolean, string, entity, or record) becomes a one-element set; and `null` — including any `null` sitting inside a returned list — contributes nothing, so a rule that evaluates to `null` leaves the relation empty (`null` is never stored, per [Values](#values)). This is why `one()` on a rule that produced `null` gives `null` straight back: the set is empty. (A timestamp, such as `now`, cannot be stored in a relation — project it to a number with a `now.get…()` method first.)
 
 Numbers are not converted automatically: do not mix integers and decimals in one arithmetic operation — `1 + 1.0` errors. Convert explicitly with `int(...)` or `double(...)`. Comparison is the exception: integers and doubles compare by mathematical value, so `1 == 1.0` is `true` and they sort together as one numeric kind (see [Order within a set](#order-within-a-set)).
 
@@ -184,6 +188,27 @@ Person lastName = one(one(self.family).name);
 Person enemies = instances(Person).filter(p, self.dislikes.exists(fam, fam in p.family) && self != p);
 Person eldest = one(sortBy(self.children, "bornYear"));
 ```
+
+### Functions and parameter rules
+
+A plain computed rule takes no arguments and is read as `e.rel`. Two related forms add arguments — one concept, two scopings:
+
+- **Parameter rule** — `TYPE RELATION(p1, p2) = EXPR;`. Like a plain rule it dispatches on the receiver's type (most specific wins) and its result is coerced into the relation's set, but it takes arguments. Call it on an entity: `actor.relation(a, b)`. Inside the body, `self` is the receiver and `p1`, `p2` are the arguments. Method calls dispatch on entity receivers only.
+- **Function** — `fun NAME(p1, p2) = EXPR;`. Module-level: no `self`, no type dispatch. It returns its value **unchanged** — no set coercion — so a function may return a scalar, a list, or a record. Call it by name: `NAME(a, b)`.
+
+The split is the point: parameter rules *are* relations (sets, dispatched); functions are plain reusable expressions. Use a function to factor a repeated subexpression into one definition.
+
+```
+fun trusted(rel) =
+    one(rel.warmth, 0) >= 5 && one(rel.dogAffinity, 0) > 0;
+
+Receptionist legal(verb, target) =
+    verb == OpenGate
+      ? one(ReceptionGate.locked, false) && trusted(self.read(target))
+      : true;
+```
+
+A parameter name shadows an entity or `self` of the same name inside the body. Names overload by arity, so `legal(x)` and `legal(x, y)` are independent declarations. A function name may not also be a stored or 0-arity relation name (a load-time error), since `e.f` and `f(...)` would otherwise be easy to confuse. Recursion is allowed; an unbounded recursion (for example a countdown with no base case) fails with a clear call-depth error rather than looping forever.
 
 ### Evaluation model
 
@@ -221,7 +246,7 @@ Person lastSpoke = session.events.filter(e, e.actor == self);
 
 Note that the host may append in occurrence order, so events are assumed to be chronological. Also, events are not deduplicated. Two identical actions are two distinct events. TWL is pure, so "react to an event" means "recompute": each evaluation reads the current stream and derives fresh values. The world never mutates itself; the host appends events to the session and may persist computed results however it likes.
 
-**Do not store an event-list result in a relation.** A computed relation that returns `session.events.filter(...)` flattens those event records into the relation's *set* — and a set is deduplicated and unordered. Two identical events would silently collapse into one (undercounting), and event records have no canonical order as set members. Instead, keep the filtered stream *inside* the expression that consumes it: project it to a scalar with `size(...)` (a count), pick from it with `argmax(...)`/`one(...)`, or fold it with `reduce(...)`. It is the *scalar* result (a number, an entity, a bool) that you store in a relation, never the list of events. The same applies to any computed relation: returning a list flattens one level into the set, so only return a list when you actually want its elements as the relation's values.
+**Do not store an event-list result in a relation.** A computed relation that returns `session.events.filter(...)` flattens those event records into the relation's *set* — and a set is deduplicated and unordered. Two identical events would silently collapse into one (undercounting) — fatal for an event stream, where every occurrence must count. Instead, keep the filtered stream *inside* the expression that consumes it: project it to a scalar with `size(...)` (a count), pick from it with `argmax(...)`/`one(...)`, or fold it with `reduce(...)`. It is the *scalar* result (a number, an entity, a bool) that you store in a relation, never the list of events. The same applies to any computed relation: returning a list flattens one level into the set, so only return a list when you actually want its elements as the relation's values.
 
 ### Randomness
 

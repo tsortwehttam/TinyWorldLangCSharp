@@ -137,6 +137,7 @@ namespace TinyWorldLang.Values
                 ValueKind.Entity => StringOrdinal((string)_ref!, (string)other._ref!) == 0,
                 ValueKind.Timestamp => AsTimestamp == other.AsTimestamp,
                 ValueKind.List => ListEquals(AsList, other.AsList),
+                ValueKind.Record => RecordEquals(AsRecord, other.AsRecord),
                 _ => false,
             };
         }
@@ -146,6 +147,19 @@ namespace TinyWorldLang.Values
             if (a.Count != b.Count) return false;
             for (int i = 0; i < a.Count; i++)
                 if (!a[i].Equals(b[i])) return false;
+            return true;
+        }
+
+        // Records are equal iff they have the same key set and equal values at each
+        // key — order-independent, so it must agree with the XOR-based hash below.
+        private static bool RecordEquals(IReadOnlyDictionary<string, Value> a, IReadOnlyDictionary<string, Value> b)
+        {
+            if (a.Count != b.Count) return false;
+            foreach (var kv in a)
+            {
+                if (!b.TryGetValue(kv.Key, out var bv)) return false;
+                if (!kv.Value.Equals(bv)) return false;
+            }
             return true;
         }
 
@@ -231,6 +245,15 @@ namespace TinyWorldLang.Values
                         foreach (var item in AsList) h = h * 31 + item.GetHashCode();
                         return h;
                     }
+                case ValueKind.Record:
+                    unchecked
+                    {
+                        // Order-independent (XOR) so it agrees with order-independent Equals.
+                        int h = 0;
+                        foreach (var kv in AsRecord)
+                            h ^= StringComparer.Ordinal.GetHashCode(kv.Key) ^ kv.Value.GetHashCode();
+                        return h;
+                    }
                 default: return _ref?.GetHashCode() ?? 0;
             }
         }
@@ -247,12 +270,24 @@ namespace TinyWorldLang.Values
             ValueKind.Entity => (string)_ref!,
             ValueKind.Timestamp => AsTimestamp.ToString("o", CultureInfo.InvariantCulture),
             ValueKind.List => "[" + string.Join(", ", ListStrings()) + "]",
+            ValueKind.Record => RecordString(),
             _ => "?",
         };
 
         private IEnumerable<string> ListStrings()
         {
             foreach (var v in AsList) yield return v.ToString();
+        }
+
+        // Fields in sorted key order so the text is deterministic (the same order the
+        // CanonicalComparer uses), matching one()/rendering reproducibility.
+        private string RecordString()
+        {
+            var keys = new List<string>(AsRecord.Keys);
+            keys.Sort(StringComparer.Ordinal);
+            var parts = new List<string>(keys.Count);
+            foreach (var k in keys) parts.Add(k + ": " + AsRecord[k].ToString());
+            return "{" + string.Join(", ", parts) + "}";
         }
     }
 }

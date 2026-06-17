@@ -161,6 +161,8 @@ namespace TinyWorldLang.Cel
                     return inner;
                 case TokType.Punct when t.Text == "[":
                     return ParseListLiteral();
+                case TokType.Punct when t.Text == "{":
+                    return ParseRecordLiteral();
                 default:
                     throw new CelException($"unexpected '{t.Text}'");
             }
@@ -178,6 +180,27 @@ namespace TinyWorldLang.Cel
                 throw new CelException("expected ']'");
             _i++;
             return new CelListExpr(items);
+        }
+
+        private CelExpr ParseRecordLiteral()
+        {
+            _i++; // '{'
+            var fields = new List<(string, CelExpr)>();
+            if (!(Peek.Type == TokType.Punct && Peek.Text == "}"))
+            {
+                do
+                {
+                    if (Peek.Type == TokType.Punct && Peek.Text == "}") break; // trailing comma
+                    if (Peek.Type != TokType.Ident) throw new CelException("expected a field name in record literal");
+                    string key = Next().Text;
+                    if (!AcceptOp(":")) throw new CelException("expected ':' after a record field name");
+                    fields.Add((key, ParseTernary()));
+                } while (AcceptPunct(","));
+            }
+            if (!(Peek.Type == TokType.Punct && Peek.Text == "}"))
+                throw new CelException("expected '}'");
+            _i++;
+            return new CelRecordExpr(fields);
         }
 
         private List<CelExpr> ParseArgs()
@@ -304,6 +327,7 @@ namespace TinyWorldLang.Cel
                         i++;
                         break;
                     case '(': case ')': case '[': case ']': case ',':
+                    case '{': case '}':
                         toks.Add(new Tok(TokType.Punct, c.ToString()));
                         i++;
                         break;

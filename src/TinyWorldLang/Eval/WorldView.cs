@@ -200,14 +200,14 @@ namespace TinyWorldLang.Eval
                 {
                     if (v.IsNull) continue;
                     if (v.Kind == ValueKind.List) throw new TwlEvalException("nested lists are not allowed in a relation result");
-                    if (v.Kind == ValueKind.Record || v.Kind == ValueKind.Timestamp)
-                        throw new TwlEvalException($"a {v.Kind} cannot be stored in a relation");
+                    if (v.Kind == ValueKind.Timestamp)
+                        throw new TwlEvalException("a Timestamp cannot be stored in a relation");
                     items.Add(v);
                 }
                 return ValueSet.From(items);
             }
-            if (result.Kind == ValueKind.Record || result.Kind == ValueKind.Timestamp)
-                throw new TwlEvalException($"a {result.Kind} cannot be stored in a relation");
+            if (result.Kind == ValueKind.Timestamp)
+                throw new TwlEvalException("a Timestamp cannot be stored in a relation");
             return ValueSet.From(new[] { result });
         }
 

@@ -169,6 +169,8 @@ namespace TinyWorldLang.Parsing
             char c = Cur;
             if (c == '"') return Value.String(ScanStringSource());
 
+            if (c == '{') return ScanRecord();
+
             if (c == '-' || char.IsDigit(c)) return ScanNumber();
 
             // identifier-like: true/false, null (error), or an entity id
@@ -184,6 +186,41 @@ namespace TinyWorldLang.Parsing
                         throw new TwlLoadException($"'{id}' is reserved and cannot be used as an entity name", _line);
                     return Value.Entity(id);
             }
+        }
+
+        /// <summary>
+        /// Scan a stored record literal <c>{ field: value, field: value }</c>. Field
+        /// values are literal <see cref="Value"/>s (strings, numbers, bools, entities,
+        /// or nested records) — parsed recursively. A trailing comma is allowed.
+        /// </summary>
+        private Value ScanRecord()
+        {
+            Advance(); // consume '{'
+            var fields = new Dictionary<string, Value>(StringComparer.Ordinal);
+            SkipTrivia();
+            if (!AtEnd && Cur != '}')
+            {
+                while (true)
+                {
+                    string key = ParseIdentifier("field name");
+                    SkipTrivia();
+                    if (AtEnd || Cur != ':')
+                        throw new TwlLoadException("expected ':' after a record field name", _line);
+                    Advance(); // consume ':'
+                    Value v = ParseValue(); // recursive; SkipTrivia handled inside
+                    if (fields.ContainsKey(key))
+                        throw new TwlLoadException($"duplicate field '{key}' in record", _line);
+                    fields[key] = v;
+                    SkipTrivia();
+                    if (!AtEnd && Cur == ',') { Advance(); SkipTrivia(); if (!AtEnd && Cur == '}') break; continue; }
+                    break;
+                }
+            }
+            SkipTrivia();
+            if (AtEnd || Cur != '}')
+                throw new TwlLoadException("expected '}' to close a record", _line);
+            Advance(); // consume '}'
+            return Value.Record(fields);
         }
 
         private Value ScanNumber()
