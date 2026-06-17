@@ -351,6 +351,25 @@ The typed accessors are strict: they operate on the canonical-first value and th
 `TwlEvalException` if the field is empty or the value has the wrong kind. Use `IsEmpty`,
 `Count`, `One()`, or `Values` when the shape is optional or multi-valued.
 
+Functions and parameter rules (see [Functions and parameter rules](#functions-and-parameter-rules))
+are callable from the host too. Build arguments with the `Value` factories
+(`Value.Int`, `Value.String`, `Value.Bool`, `Value.Double`, `Value.Entity`, `Value.Record`, `Value.List`):
+
+```csharp
+using TinyWorldLang.Values; // Value, ValueKind
+
+// A module function `fun add(p, q) = p + q;` — returns its value UNCHANGED (a Value).
+Value sum = view.CallFunction("add", Value.Int(2), Value.Int(3)); // sum.AsInt == 5
+
+// A parameter rule `Receptionist legal(verb, target) = …;` — dispatched on the
+// receiver's type, its result coerced into a set and returned as a Field.
+bool ok = view.Entity("Rex").Call("legal", Value.Entity("OpenGate"), Value.Entity("Gate")).AsBool;
+```
+
+`CallFunction` returns the raw `Value` (a scalar, list, or record — no set coercion), while
+`Entity.Call` returns a `Field` like any relation read. Both throw `TwlEvalException` if no
+function/rule of that name and arity applies.
+
 Every string value is a [Mustache template](#templates) rendered against its owning entity, so
 `.Text` always returns the rendered result. Supply an escaper at load time for your output
 target (it applies to `{{ }}` tags, not `{{{ }}}` raw tags):

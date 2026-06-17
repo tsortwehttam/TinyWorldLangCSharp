@@ -163,6 +163,59 @@ namespace TinyWorldLang.Tests
             Assert.Throws<TwlLoadException>(() => TwlWorld.Load("fun f(x, x) = x;"));
         }
 
+        // -------- host C# call surface --------
+
+        [Fact]
+        public void Host_CallsFunction_WithArgs()
+        {
+            var view = TwlWorld.Load("fun add(p, q) = p + q;").Evaluate();
+            var sum = view.CallFunction("add", Values.Value.Int(2), Values.Value.Int(3));
+            Assert.Equal(5, sum.AsInt);
+        }
+
+        [Fact]
+        public void Host_CallsFunction_ReturningARecord_Unchanged()
+        {
+            var view = TwlWorld.Load("fun mk(n) = { val: n };").Evaluate();
+            var rec = view.CallFunction("mk", Values.Value.Int(7));
+            Assert.Equal(Values.ValueKind.Record, rec.Kind);
+            Assert.Equal(7, rec.AsRecord["val"].AsInt);
+        }
+
+        [Fact]
+        public void Host_CallsFunction_UnknownArity_IsEvalError()
+        {
+            var view = TwlWorld.Load("fun add(p, q) = p + q;").Evaluate();
+            var ex = Assert.Throws<TwlEvalException>(() => view.CallFunction("add", Values.Value.Int(1)));
+            Assert.Contains("unknown function 'add'", ex.Message);
+        }
+
+        [Fact]
+        public void Host_CallsParameterRule_OnAnEntity_Dispatched()
+        {
+            var view = TwlWorld.Load(@"
+                Animal extends Entity; Dog extends Animal;
+                Rex instanceof Dog;
+                Animal describe(x) = ""animal sees "" + string(x);
+                Dog describe(x) = ""dog sees "" + string(x);
+            ").Evaluate();
+
+            var field = view.Entity("Rex").Call("describe", Values.Value.Int(1));
+            Assert.Equal("dog sees 1", field.Text);
+        }
+
+        [Fact]
+        public void Host_CallsParameterRule_WithEntityArg()
+        {
+            var view = TwlWorld.Load(@"
+                T extends Entity; X instanceof T; Y instanceof T;
+                T sees(other) = other;
+            ").Evaluate();
+
+            var field = view.Entity("X").Call("sees", Values.Value.Entity("Y"));
+            Assert.Equal("Y", field.AsEntity);
+        }
+
         // -------- parsing --------
 
         [Fact]

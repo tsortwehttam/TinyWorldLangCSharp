@@ -76,11 +76,31 @@ namespace TinyWorldLang.Eval
         public bool IsInstanceOf(string entity, string type) =>
             _world.IsInstanceOf(_world.Canonical(entity), _world.Canonical(type));
 
+        /// <summary>
+        /// Call a module function (<c>fun name(...)</c>) from the host. Returns the
+        /// body's value <em>unchanged</em> — a scalar, a list, or a record — with no
+        /// set coercion. Throws <see cref="TwlEvalException"/> if no function of this
+        /// name and arity is declared, or if the body fails.
+        /// </summary>
+        /// <example><code>
+        /// var sum = view.CallFunction("add", Value.Int(2), Value.Int(3)); // Value.Int(5)
+        /// </code></example>
+        public Value CallFunction(string name, params Value[] args) =>
+            ResolveFunction(name, args ?? System.Array.Empty<Value>());
+
+        /// <summary>Call a module function with an already-built argument list.</summary>
+        public Value CallFunction(string name, IReadOnlyList<Value> args) =>
+            ResolveFunction(name, args ?? System.Array.Empty<Value>());
+
         // -------- Internal surface used by Entity / Field --------
 
         internal Entity EntityHandle(string canonicalName) => new Entity(this, canonicalName);
 
         internal ValueSet ResolveSet(string canonicalEntity, string relation) => Resolve(canonicalEntity, relation);
+
+        /// <summary>Call a parameter rule on a receiver and present the coerced result set as a <see cref="Field"/>.</summary>
+        internal Field CallRuleField(string canonicalEntity, string relation, IReadOnlyList<Value> args) =>
+            new Field(this, canonicalEntity, relation, ResolveCall(canonicalEntity, relation, args ?? System.Array.Empty<Value>()));
 
         /// <summary>Render a single value to presentation text; a string value is rendered as a template.</summary>
         internal string RenderValueText(Value v, string owner)

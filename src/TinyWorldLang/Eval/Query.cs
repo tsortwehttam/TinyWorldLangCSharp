@@ -31,6 +31,18 @@ namespace TinyWorldLang.Eval
         public Field Relation(string relation) => this[relation];
 
         /// <summary>
+        /// Call a parameter rule on this entity (the <c>actor.relation(a, b)</c> form):
+        /// dispatched on this entity's type, its result coerced into a relation set and
+        /// returned as a <see cref="Field"/>. Build arguments with the <c>Value</c>
+        /// factories (e.g. <c>Value.Int(1)</c>, <c>Value.Entity(other.Name)</c>).
+        /// </summary>
+        /// <example><code>
+        /// var legal = rex.Call("legal", Value.Entity("OpenGate"), Value.Entity("Gate")).AsBool;
+        /// </code></example>
+        public Field Call(string relation, params Value[] args) =>
+            _view.CallRuleField(Name, relation, args ?? System.Array.Empty<Value>());
+
+        /// <summary>
         /// The names of relations declared for this entity (its stored relations plus
         /// any computed relation whose type it matches), in canonical order. Cheap:
         /// does not evaluate the relations — read each via the indexer to get values.
@@ -51,15 +63,25 @@ namespace TinyWorldLang.Eval
         private readonly WorldView _view;
         private readonly string _owner;
         private readonly string _relation;
+        private readonly ValueSet? _cached; // non-null for a parameter-rule call result (args, not memoizable by relation)
 
         internal Field(WorldView view, string owner, string relation)
         {
             _view = view;
             _owner = owner;
             _relation = relation;
+            _cached = null;
         }
 
-        private ValueSet Set => _view.ResolveSet(_owner, _relation);
+        internal Field(WorldView view, string owner, string relation, ValueSet cached)
+        {
+            _view = view;
+            _owner = owner;
+            _relation = relation;
+            _cached = cached;
+        }
+
+        private ValueSet Set => _cached ?? _view.ResolveSet(_owner, _relation);
 
         public int Count => Set.Count;
         public bool IsEmpty => Set.IsEmpty;
